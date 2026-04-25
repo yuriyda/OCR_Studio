@@ -42,4 +42,8 @@ describe('api', () => {
     expect(opts.method).toBe('PATCH');
     expect(JSON.parse(opts.body)).toEqual({ project_id: 7 });
   });
+
+  it('projectZipUrl returns correct path', () => {
+    expect(api.projectZipUrl(7)).toBe('/api/projects/7/zip');
+  });
 });

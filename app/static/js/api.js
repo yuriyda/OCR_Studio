@@ -51,4 +51,5 @@ export const api = {
   getRendered: (id) => fetch(`/api/rendered/${id}`).then(_json),
   getPreview: (id) => fetch(`/api/preview/${id}`).then(_json),
   getSystemInfo: () => fetch('/api/system').then(_json),
+  projectZipUrl: (projectId) => `/api/projects/${projectId}/zip`,
 };

@@ -179,6 +179,34 @@ function bindUI() {
   $('download-btn').addEventListener('click', () => {
     if (selectedDocId) window.open(`/api/result/${selectedDocId}`, '_blank');
   });
+
+  $('copy-btn').addEventListener('click', async () => {
+    if (!selectedDocId) return;
+    try {
+      let text;
+      const doc = docsCache.find(d => d.id === selectedDocId);
+      if (doc && doc.format === 'docx') {
+        const data = await api.getRendered(selectedDocId);
+        const tmp = document.createElement('div');
+        tmp.innerHTML = data.html;
+        text = tmp.textContent || '';
+      } else {
+        const data = await api.getMarkdown(selectedDocId);
+        text = data.markdown || '';
+      }
+      await navigator.clipboard.writeText(text);
+      const toast = $('copy-toast');
+      toast.style.display = 'inline';
+      setTimeout(() => { toast.style.display = 'none'; }, 1500);
+    } catch (e) {
+      alert('Не удалось скопировать: ' + e.message);
+    }
+  });
+
+  $('batch-zip-btn').addEventListener('click', () => {
+    const pid = state.activeProjectId;
+    if (pid != null) window.open(api.projectZipUrl(pid), '_blank');
+  });
 }
 
 async function uploadFiles(filesList, pid) {
