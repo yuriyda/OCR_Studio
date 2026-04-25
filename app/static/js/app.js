@@ -9,6 +9,12 @@ import { handleDrop, startDocDrag } from './drag.js';
 import { Polling } from './polling.js';
 import { renderPreview } from './preview.js';
 import { renderStatusBar } from './statusbar.js';
+import { getCopyText } from './clipboard.js';
+
+async function getCopyTextForDoc(docId) {
+  const doc = docsCache.find(d => d.id === docId);
+  return getCopyText(doc, api);
+}
 
 const $ = (id) => document.getElementById(id);
 let projectsCache = [];
@@ -183,16 +189,10 @@ function bindUI() {
   $('copy-btn').addEventListener('click', async () => {
     if (!selectedDocId) return;
     try {
-      let text;
-      const doc = docsCache.find(d => d.id === selectedDocId);
-      if (doc && doc.format === 'docx') {
-        const data = await api.getRendered(selectedDocId);
-        const tmp = document.createElement('div');
-        tmp.innerHTML = data.html;
-        text = tmp.textContent || '';
-      } else {
-        const data = await api.getMarkdown(selectedDocId);
-        text = data.markdown || '';
+      const text = await getCopyTextForDoc(selectedDocId);
+      if (!navigator.clipboard) {
+        alert('Буфер обмена недоступен (требуется HTTPS или localhost)');
+        return;
       }
       await navigator.clipboard.writeText(text);
       const toast = $('copy-toast');
