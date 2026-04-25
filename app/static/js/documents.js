@@ -19,15 +19,18 @@ function escHtml(s) {
 }
 
 /**
- * Форматирует секунды в строку M:SS.
+ * Форматирует секунды в строку M:SS, или H:MM:SS если sec >= 1 часа.
  * @param {number|null} sec
  * @returns {string}
  */
 function fmtTime(sec) {
   if (sec == null || sec < 0) return '';
-  const m = Math.floor(sec / 60);
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
   const s = sec % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
+  const mm = String(m).padStart(2, '0');
+  const ss = String(s).padStart(2, '0');
+  return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
 }
 
 /**
@@ -46,7 +49,12 @@ export function renderDocuments(container, docs, activeId) {
     let progress = '';
     if (d.status === 'processing') {
       const pages = (d.current_page != null && d.page_count) ? `<span class="page-counter">${d.current_page}/${d.page_count}</span>` : '';
-      const elapsed = d.elapsed_seconds != null ? `<span class="elapsed">${fmtTime(d.elapsed_seconds)}</span>` : '';
+      const elapsedTxt = fmtTime(d.elapsed_seconds);
+      const etaTxt = fmtTime(d.eta_seconds);
+      const timing = (elapsedTxt || etaTxt)
+        ? `<span class="elapsed">${elapsedTxt}${etaTxt ? ` / ~${etaTxt}` : ''}</span>`
+        : '';
+      const elapsed = timing;
       if (d.progress_percent != null) {
         progress = `${pages}<div class="progress-bar"><div class="progress-fill" style="width:${d.progress_percent}%"></div></div>${elapsed}`;
       } else {

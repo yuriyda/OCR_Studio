@@ -63,8 +63,16 @@ describe('documents', () => {
     renderDocuments(container, [
       { id: 'a1', filename: 'x.pdf', status: 'processing', progress_percent: 50, current_page: 5, page_count: 10, elapsed_seconds: 65, eta_seconds: 65 },
     ], null);
-    expect(container.textContent).toMatch(/1:05/);
+    expect(container.textContent).toContain('1:05');
+    expect(container.textContent).toContain('~1:05');
     expect(container.textContent).toContain('5/10');
+  });
+
+  it('formats elapsed >=1h with H:MM:SS', () => {
+    renderDocuments(container, [
+      { id: 'a1', filename: 'x.pdf', status: 'processing', progress_percent: 10, current_page: 1, page_count: 10, elapsed_seconds: 3700, eta_seconds: null },
+    ], null);
+    expect(container.textContent).toContain('1:01:40');
   });
 });
 
