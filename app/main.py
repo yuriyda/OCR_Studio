@@ -17,7 +17,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import Body, FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -262,6 +262,89 @@ async def get_markdown(doc_id: str):
         if not path or not path.exists():
             raise HTTPException(404, "Result file missing")
         return {"markdown": path.read_text(encoding="utf-8") if path.suffix in (".md", ".txt") else ""}
+    finally:
+        conn.close()
+
+
+# --- Projects CRUD ---
+
+@app.get("/api/projects")
+async def list_projects():
+    conn = _conn()
+    try:
+        pr = ProjectRepo(conn)
+        doc_repo = DocumentRepo(conn)
+        result = []
+        for p in pr.list():
+            docs = doc_repo.list(project_id=p["id"])
+            result.append({
+                "id": p["id"],
+                "name": p["name"],
+                "created_at": p["created_at"],
+                "doc_count": len(docs),
+                "total_bytes": doc_repo.total_bytes(p["id"]),
+            })
+        return result
+    finally:
+        conn.close()
+
+
+@app.post("/api/projects")
+async def create_project(payload: dict = Body(...)):
+    conn = _conn()
+    try:
+        try:
+            p = ProjectRepo(conn).create(payload.get("name", ""))
+        except ProjectError as e:
+            msg = str(e)
+            code = 409 if "exists" in msg else 400
+            raise HTTPException(code, msg)
+        return {**p, "doc_count": 0, "total_bytes": 0}
+    finally:
+        conn.close()
+
+
+@app.patch("/api/projects/{project_id}")
+async def rename_project(project_id: int, payload: dict = Body(...)):
+    conn = _conn()
+    try:
+        try:
+            ProjectRepo(conn).rename(project_id, payload.get("name", ""))
+        except ProjectError as e:
+            msg = str(e)
+            if "Inbox" in msg:
+                raise HTTPException(400, msg)
+            code = 409 if "exists" in msg else 400
+            raise HTTPException(code, msg)
+        p = ProjectRepo(conn).get(project_id)
+        doc_repo = DocumentRepo(conn)
+        return {
+            **p,
+            "doc_count": len(doc_repo.list(project_id=project_id)),
+            "total_bytes": doc_repo.total_bytes(project_id),
+        }
+    finally:
+        conn.close()
+
+
+@app.delete("/api/projects/{project_id}", status_code=204)
+async def delete_project(project_id: int):
+    conn = _conn()
+    try:
+        pr = ProjectRepo(conn)
+        if pr.get(project_id) is None:
+            raise HTTPException(404, "Project not found")
+        doc_repo = DocumentRepo(conn)
+        processing = [d for d in doc_repo.list(project_id=project_id) if d["status"] == "processing"]
+        if processing:
+            raise HTTPException(409, "project has processing documents, wait")
+        # Удаляем FS-папки документов проекта до cascade-delete
+        for d in doc_repo.list(project_id=project_id):
+            files.delete_doc_dir(DATA_DIR, d["id"])
+        try:
+            pr.delete(project_id)
+        except ProjectError as e:
+            raise HTTPException(400, str(e))
     finally:
         conn.close()
 

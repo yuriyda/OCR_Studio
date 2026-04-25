@@ -74,3 +74,70 @@ def test_status_returns_extended_fields(client):
         "page_count", "current_page", "progress_percent", "size_bytes",
     }
     assert expected <= keys
+
+
+def test_list_projects_includes_inbox(client):
+    r = client.get("/api/projects")
+    assert r.status_code == 200
+    body = r.json()
+    assert any(p["name"] == "Inbox" and p["id"] == 1 for p in body)
+    assert all("doc_count" in p and "total_bytes" in p for p in body)
+
+
+def test_create_project(client):
+    r = client.post("/api/projects", json={"name": "P1"})
+    assert r.status_code == 200
+    p = r.json()
+    assert p["name"] == "P1"
+    assert p["doc_count"] == 0
+
+
+def test_create_project_duplicate_409(client):
+    client.post("/api/projects", json={"name": "Dup"})
+    r = client.post("/api/projects", json={"name": "Dup"})
+    assert r.status_code == 409
+
+
+def test_create_project_empty_400(client):
+    r = client.post("/api/projects", json={"name": "  "})
+    assert r.status_code == 400
+
+
+def test_rename_project(client):
+    p = client.post("/api/projects", json={"name": "Old"}).json()
+    r = client.patch(f"/api/projects/{p['id']}", json={"name": "New"})
+    assert r.status_code == 200
+    assert r.json()["name"] == "New"
+
+
+def test_rename_inbox_400(client):
+    r = client.patch("/api/projects/1", json={"name": "X"})
+    assert r.status_code == 400
+
+
+def test_delete_project(client):
+    p = client.post("/api/projects", json={"name": "ToDel"}).json()
+    r = client.delete(f"/api/projects/{p['id']}")
+    assert r.status_code == 204
+
+
+def test_delete_inbox_400(client):
+    r = client.delete("/api/projects/1")
+    assert r.status_code == 400
+
+
+def test_upload_to_specific_project(client):
+    p = client.post("/api/projects", json={"name": "Target"}).json()
+    r = _upload(client, project_id=p["id"])
+    assert r.status_code == 200
+    assert r.json()[0]["project_id"] == p["id"]
+
+
+def test_status_filter_by_project(client):
+    p = client.post("/api/projects", json={"name": "Filtered"}).json()
+    _upload(client, name="x.pdf")
+    _upload(client, name="y.pdf", project_id=p["id"])
+    r = client.get(f"/api/status?project_id={p['id']}")
+    docs = r.json()
+    assert all(d["project_id"] == p["id"] for d in docs)
+    assert {d["filename"] for d in docs} == {"y.pdf"}
