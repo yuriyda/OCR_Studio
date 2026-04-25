@@ -46,3 +46,62 @@ def test_get_connection_foreign_keys_on(tmp_data_dir):
     val = conn.execute("PRAGMA foreign_keys").fetchone()[0]
     assert val == 1
     conn.close()
+
+
+def test_cascade_delete_documents_with_project(tmp_data_dir):
+    db_path = tmp_data_dir / "data.db"
+    db.init(db_path)
+    conn = db.get_connection(db_path)
+    conn.execute(
+        "INSERT INTO projects (name, created_at) VALUES (?, ?)",
+        ("P", "2026-04-25T00:00:00+00:00"),
+    )
+    pid = conn.execute("SELECT id FROM projects WHERE name='P'").fetchone()[0]
+    conn.execute(
+        "INSERT INTO documents (id, project_id, filename, format, lang, status, created_at) "
+        "VALUES (?, ?, ?, 'md', 'ru', 'queued', ?)",
+        ("a" * 12, pid, "f.pdf", "2026-04-25T00:00:00+00:00"),
+    )
+    conn.commit()
+    conn.execute("DELETE FROM projects WHERE id = ?", (pid,))
+    conn.commit()
+    assert conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0] == 0
+    conn.close()
+
+
+def test_check_constraint_invalid_status_rejected(tmp_data_dir):
+    db_path = tmp_data_dir / "data.db"
+    db.init(db_path)
+    conn = db.get_connection(db_path)
+    conn.execute(
+        "INSERT INTO projects (name, created_at) VALUES (?, ?)",
+        ("P", "2026-04-25T00:00:00+00:00"),
+    )
+    pid = conn.execute("SELECT id FROM projects WHERE name='P'").fetchone()[0]
+    import pytest
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO documents (id, project_id, filename, format, lang, status, created_at) "
+            "VALUES (?, ?, ?, 'md', 'ru', 'INVALID', ?)",
+            ("b" * 12, pid, "f.pdf", "2026-04-25T00:00:00+00:00"),
+        )
+    conn.close()
+
+
+def test_check_constraint_invalid_format_rejected(tmp_data_dir):
+    db_path = tmp_data_dir / "data.db"
+    db.init(db_path)
+    conn = db.get_connection(db_path)
+    conn.execute(
+        "INSERT INTO projects (name, created_at) VALUES (?, ?)",
+        ("P", "2026-04-25T00:00:00+00:00"),
+    )
+    pid = conn.execute("SELECT id FROM projects WHERE name='P'").fetchone()[0]
+    import pytest
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO documents (id, project_id, filename, format, lang, status, created_at) "
+            "VALUES (?, ?, ?, 'pdf', 'ru', 'queued', ?)",
+            ("c" * 12, pid, "f.pdf", "2026-04-25T00:00:00+00:00"),
+        )
+    conn.close()
