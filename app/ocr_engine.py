@@ -138,7 +138,7 @@ def process_file(
 ) -> str:
     """Run OCR on a file and return the result as a markdown string.
 
-    progress_callback(current_page: int, total_pages: int) — вызывается после обработки каждой страницы.
+    progress_callback(current_page: int, total_pages: int) — вызывается в начале обработки каждой страницы (current_page 1-based).
     """
     engine = get_engine(lang)
     path = Path(file_path)

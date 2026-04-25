@@ -10,27 +10,16 @@ import asyncio
 import importlib
 import io
 import sys
-import types
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 
-def _stub_paddleocr_modules():
-    """Подставляет заглушки для paddleocr и paddlepaddle, которых нет в тестовой среде."""
-    for mod_name in ("paddleocr", "paddle", "paddlepaddle"):
-        if mod_name not in sys.modules:
-            sys.modules[mod_name] = types.ModuleType(mod_name)
-    paddle_mod = sys.modules["paddleocr"]
-    paddle_mod.PPStructureV3 = MagicMock()
-
-
 @pytest.fixture
 def client(tmp_data_dir, monkeypatch):
-    # Заглушаем paddleocr до импорта ocr_engine, чтобы избежать ModuleNotFoundError
-    _stub_paddleocr_modules()
+    # paddleocr stubs устанавливаются на module level через tests/conftest.py:stub_paddleocr_modules
 
     # Перезагружаем модули, чтобы учесть заглушки (если уже импортированы ранее)
     for mod in list(sys.modules.keys()):
@@ -314,7 +303,7 @@ def test_page_progress_updates_during_processing(tmp_data_dir, monkeypatch):
     from app import main, db
     from app.storage import DocumentRepo
 
-    _stub_paddleocr_modules()
+    # Conftest stubs paddleocr at module load; clear app.* to ensure fresh import after data dir override
     for mod in list(sys.modules.keys()):
         if mod.startswith("app"):
             del sys.modules[mod]
