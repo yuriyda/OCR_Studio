@@ -13,7 +13,7 @@ COPY requirements.txt .
 RUN pip3 install --no-cache-dir paddlepaddle-gpu==3.0.0 \
         -i https://www.paddlepaddle.org.cn/packages/stable/cu126/ \
     && pip3 install --no-cache-dir -r requirements.txt \
-    && pip3 install --no-cache-dir paddlex[ocr]
+    && pip3 install --no-cache-dir 'paddlex[ocr]==3.5.1'
 
 COPY app/ app/
 
