@@ -178,3 +178,18 @@ def test_delete_processing_document_409(client):
     conn.close()
     r = client.delete(f"/api/documents/{upload[0]['id']}")
     assert r.status_code == 409
+
+
+def test_system_endpoint_shape(client):
+    r = client.get("/api/system")
+    assert r.status_code == 200
+    body = r.json()
+    assert set(body.keys()) >= {"gpu", "cuda", "vram_gb", "engine_status", "engine_lang"}
+
+
+def test_projects_total_bytes(client):
+    p = client.post("/api/projects", json={"name": "P"}).json()
+    _upload(client, content=b"x" * 1024, project_id=p["id"])
+    body = client.get("/api/projects").json()
+    target = next(x for x in body if x["id"] == p["id"])
+    assert target["total_bytes"] >= 1024

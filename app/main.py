@@ -22,6 +22,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import db, files, ocr_engine, converters
+from . import system as sys_info
 from .storage import ProjectRepo, DocumentRepo, ProjectError, INBOX_ID
 
 logging.basicConfig(level=logging.INFO)
@@ -381,6 +382,18 @@ async def delete_document(doc_id: str):
         files.delete_doc_dir(DATA_DIR, doc_id)
     finally:
         conn.close()
+
+
+@app.get("/api/system")
+async def system_info():
+    from .ocr_engine import _engine, _engine_lang
+    if _engine is None:
+        status = "loading"
+        lang = None
+    else:
+        status = "ready"
+        lang = _engine_lang
+    return sys_info.get_system_info(engine_status=status, engine_lang=lang)
 
 
 @app.get("/api/preview/{doc_id}")
