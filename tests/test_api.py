@@ -193,3 +193,61 @@ def test_projects_total_bytes(client):
     body = client.get("/api/projects").json()
     target = next(x for x in body if x["id"] == p["id"])
     assert target["total_bytes"] >= 1024
+
+
+def _force_done(doc_id, content="# stub", fmt="md"):
+    """Помощник: помечает документ done и кладёт result-файл."""
+    from app import db, main, files as files_mod
+    from app.storage import DocumentRepo
+    conn = db.get_connection(main.DB_PATH)
+    DocumentRepo(conn).update(
+        doc_id, status="done",
+        finished_at="2026-04-25T10:00:00+00:00",
+        progress_percent=100.0,
+    )
+    conn.close()
+    if fmt == "docx":
+        from docx import Document
+        import io as _io
+        d = Document()
+        d.add_paragraph("test")
+        buf = _io.BytesIO()
+        d.save(buf)
+        files_mod.save_result(main.DATA_DIR, doc_id, buf.getvalue(), "docx")
+    else:
+        files_mod.save_result(main.DATA_DIR, doc_id, content, fmt)
+
+
+def test_rendered_md_returns_html(client):
+    upload = _upload(client).json()
+    _force_done(upload[0]["id"], "# Heading\n\n| a | b |\n| --- | --- |\n| 1 | 2 |", "md")
+    r = client.get(f"/api/rendered/{upload[0]['id']}")
+    assert r.status_code == 200
+    html = r.json()["html"]
+    assert "<h1>Heading</h1>" in html
+    assert "<table>" in html
+
+
+def test_rendered_docx_returns_html(client):
+    upload = _upload(client).json()
+    from app import db, main
+    from app.storage import DocumentRepo
+    conn = db.get_connection(main.DB_PATH)
+    DocumentRepo(conn).update(upload[0]["id"], format="docx")
+    conn.close()
+    _force_done(upload[0]["id"], fmt="docx")
+    r = client.get(f"/api/rendered/{upload[0]['id']}")
+    assert r.status_code == 200
+    assert "<" in r.json()["html"]
+
+
+def test_rendered_txt_wraps_pre(client):
+    upload = _upload(client).json()
+    from app import db, main
+    from app.storage import DocumentRepo
+    conn = db.get_connection(main.DB_PATH)
+    DocumentRepo(conn).update(upload[0]["id"], format="txt")
+    conn.close()
+    _force_done(upload[0]["id"], "plain\ntext", "txt")
+    r = client.get(f"/api/rendered/{upload[0]['id']}")
+    assert "<pre>" in r.json()["html"]

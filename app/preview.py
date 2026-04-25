@@ -52,3 +52,12 @@ def sanitize_html(html: str) -> str:
         strip=True,
         strip_comments=True,
     )
+
+
+import io as _io
+import mammoth
+
+
+def docx_to_html(docx_bytes: bytes) -> str:
+    result = mammoth.convert_to_html(_io.BytesIO(docx_bytes))
+    return sanitize_html(result.value)

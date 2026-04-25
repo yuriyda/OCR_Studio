@@ -396,6 +396,33 @@ async def system_info():
     return sys_info.get_system_info(engine_status=status, engine_lang=lang)
 
 
+from . import preview as _preview
+
+
+@app.get("/api/rendered/{doc_id}")
+async def get_rendered(doc_id: str):
+    conn = _conn()
+    try:
+        doc = DocumentRepo(conn).get(doc_id)
+        if not doc:
+            raise HTTPException(404, "Document not found")
+        if doc["status"] != "done":
+            raise HTTPException(400, f"Document status: {doc['status']}")
+        path = files.result_path(DATA_DIR, doc_id)
+        if not path or not path.exists():
+            raise HTTPException(404, "Result file missing")
+        fmt = doc["format"]
+        if fmt == "md":
+            return {"html": _preview.markdown_to_html(path.read_text(encoding="utf-8"))}
+        if fmt == "txt":
+            return {"html": _preview.text_to_html(path.read_text(encoding="utf-8"))}
+        if fmt == "docx":
+            return {"html": _preview.docx_to_html(path.read_bytes())}
+        raise HTTPException(400, f"Unsupported format: {fmt}")
+    finally:
+        conn.close()
+
+
 @app.get("/api/preview/{doc_id}")
 async def preview_pages(doc_id: str):
     import base64

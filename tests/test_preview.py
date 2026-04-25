@@ -66,3 +66,32 @@ def test_text_to_html_wraps_in_pre():
     assert "<pre>" in clean
     assert "&lt;script&gt;" in clean
     assert "<script>" not in clean
+
+
+def test_docx_to_html_table_preserved(tmp_path):
+    from docx import Document
+    doc = Document()
+    doc.add_heading("Hi", level=1)
+    table = doc.add_table(rows=2, cols=2)
+    table.rows[0].cells[0].text = "A"
+    table.rows[0].cells[1].text = "B"
+    table.rows[1].cells[0].text = "1"
+    table.rows[1].cells[1].text = "2"
+    docx_path = tmp_path / "x.docx"
+    doc.save(docx_path)
+
+    html = preview.docx_to_html(docx_path.read_bytes())
+    assert "<table>" in html
+    assert "A" in html and "1" in html
+    assert "<h1>" in html or "Hi" in html
+
+
+def test_docx_to_html_sanitized():
+    from docx import Document
+    import io as _io
+    d = Document()
+    d.add_paragraph("text")
+    buf = _io.BytesIO()
+    d.save(buf)
+    html = preview.docx_to_html(buf.getvalue())
+    assert "<script" not in html
