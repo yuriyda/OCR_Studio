@@ -238,6 +238,7 @@ function handleProjectMenu(id) {
     },
     {
       label: 'Удалить проект',
+      danger: true,
       action: async () => {
         if (!confirm(`Удалить проект "${proj.name}" и все его документы (${proj.doc_count} шт.)?`)) return;
         try {
@@ -273,6 +274,7 @@ function handleDocMenu(docId) {
     ...moveItems,
     {
       label: 'Удалить',
+      danger: true,
       action: async () => {
         if (!confirm(`Удалить "${doc.filename}"?`)) return;
         try {
