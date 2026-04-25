@@ -1,4 +1,12 @@
-"""Converters: markdown -> txt, markdown -> docx."""
+"""
+Конвертеры результата OCR: markdown → plain txt, markdown → docx.
+
+Редактирование:
+- md_to_txt: regex-стрипы только базовые (заголовки, bold/italic) — не превращать в полноценный
+  markdown-парсер.
+- md_to_docx: использует python-docx; таблицы и заголовки обязательны для соответствия ТЗ §2.
+- Не добавлять зависимости — только stdlib + python-docx.
+"""
 
 import io
 import re

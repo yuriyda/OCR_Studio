@@ -1,4 +1,13 @@
-"""OCR engine — wrapper around PPStructureV3."""
+"""
+Обёртка над PaddleOCR PPStructureV3.
+
+Редактирование:
+- Не менять public-API `process_file(file_path, lang, progress_callback)` без согласования —
+  его вызывает worker в app/main.py.
+- Фикс порядка колонок таблиц через сортировку по X-координате (`html_table_to_markdown`)
+  не удалять — он чинит баг SLANet (см. memory.md «Table Column Order Fix»).
+- progress_callback вызывается в начале обработки каждой страницы (1-based).
+"""
 
 import logging
 from pathlib import Path
