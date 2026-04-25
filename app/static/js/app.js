@@ -57,9 +57,33 @@ function refreshStatusBar(systemInfo) {
   });
 }
 
+const previewPagesCache = new Map();
+
+async function loadPagePreviews(docId) {
+  const bar = $('preview-bar');
+  if (!docId) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+  bar.style.display = 'flex';
+  if (previewPagesCache.has(docId)) {
+    bar.innerHTML = previewPagesCache.get(docId);
+    return;
+  }
+  bar.innerHTML = '<span class="spinner"></span>';
+  try {
+    const data = await api.getPreview(docId);
+    const html = data.pages.map((b64, i) =>
+      `<img src="data:image/jpeg;base64,${b64}" alt="Page ${i+1}" title="Page ${i+1}">`
+    ).join('');
+    previewPagesCache.set(docId, html);
+    bar.innerHTML = html;
+  } catch {
+    bar.innerHTML = '<span style="color:var(--text2);font-size:0.8rem;">Превью недоступно</span>';
+  }
+}
+
 async function selectDocument(docId) {
   selectedDocId = docId;
   const doc = docsCache.find(d => d.id === docId);
+  loadPagePreviews(docId);
   await renderPreview($('result-area'), doc, previewMode, api);
 }
 

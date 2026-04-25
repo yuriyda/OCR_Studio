@@ -34,6 +34,10 @@ header h1 { font-size:1.3rem; font-weight:600; }
 .dropzone:hover, .dropzone.drag-over { border-color:var(--accent); color:var(--text); }
 .dropzone input { display:none; }
 .content { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+.preview-bar { display:flex; gap:8px; padding:10px 12px; overflow-x:auto; background:var(--surface); border-bottom:1px solid var(--border); min-height:90px; align-items:center; flex-shrink:0; }
+.preview-bar img { height:70px; border-radius:4px; border:2px solid var(--border); object-fit:contain; background:#fff; cursor:pointer; transition:border-color 0.15s; }
+.preview-bar img:hover { border-color:var(--accent); }
+.preview-bar .spinner { margin:0 auto; }
 .preview-tabs { display:flex; gap:0; padding:0 12px; background:var(--surface); border-bottom:1px solid var(--border); }
 .preview-tabs button { background:transparent; color:var(--text2); border:none; padding:10px 16px; cursor:pointer; font-size:0.9rem; border-bottom:2px solid transparent; }
 .preview-tabs button.active { color:var(--text); border-bottom-color:var(--accent); }
@@ -86,6 +90,7 @@ header h1 { font-size:1.3rem; font-weight:600; }
   </div>
 
   <div class="content">
+    <div class="preview-bar" id="preview-bar" style="display:none;"></div>
     <div class="preview-tabs">
       <button id="tab-source" class="active">Source</button>
       <button id="tab-rendered">Rendered</button>
