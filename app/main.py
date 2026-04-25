@@ -470,3 +470,50 @@ async def preview_pages(doc_id: str):
         return {"pages": pages}
     finally:
         conn.close()
+
+
+@app.get("/api/projects/{project_id}/zip")
+async def download_project_zip(project_id: int):
+    """Скачать архив всех done-документов проекта."""
+    import io
+    import zipfile
+    from fastapi.responses import StreamingResponse
+
+    conn = _conn()
+    try:
+        pr = ProjectRepo(conn)
+        project = pr.get(project_id)
+        if project is None:
+            raise HTTPException(404, "Project not found")
+        doc_repo = DocumentRepo(conn)
+        done_docs = [d for d in doc_repo.list(project_id=project_id) if d["status"] == "done"]
+        if not done_docs:
+            raise HTTPException(404, "No completed documents in project")
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            seen_names: set[str] = set()
+            for d in done_docs:
+                path = files.result_path(DATA_DIR, d["id"])
+                if not path or not path.exists():
+                    continue
+                stem = Path(d["filename"]).stem
+                arcname = f"{stem}{path.suffix}"
+                base_arc = arcname
+                counter = 1
+                while arcname in seen_names:
+                    arcname = f"{stem}_{counter}{path.suffix}"
+                    counter += 1
+                seen_names.add(arcname)
+                zf.write(path, arcname=arcname)
+        buf.seek(0)
+
+        safe_proj = "".join(c if c.isalnum() or c in "-_" else "_" for c in project["name"])
+        filename = f"{safe_proj}.zip"
+        return StreamingResponse(
+            iter([buf.getvalue()]),
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    finally:
+        conn.close()

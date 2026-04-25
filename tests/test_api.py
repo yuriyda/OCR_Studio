@@ -341,3 +341,46 @@ def test_page_progress_updates_during_processing(tmp_data_dir, monkeypatch):
                 conn.close()
 
     assert captured_pcent and captured_pcent[0] == 25.0
+
+
+def test_project_zip_empty_project_returns_404(client):
+    p = client.post("/api/projects", json={"name": "EmptyZip"}).json()
+    r = client.get(f"/api/projects/{p['id']}/zip")
+    assert r.status_code == 404
+
+
+def test_project_zip_returns_zip_with_results(client):
+    """ZIP содержит только результаты завершённых документов."""
+    p = client.post("/api/projects", json={"name": "ZipP"}).json()
+    upload = _upload(client, project_id=p["id"]).json()
+    _force_done(upload[0]["id"], "# zipped result", "md")
+    r = client.get(f"/api/projects/{p['id']}/zip")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/zip"
+
+    import io, zipfile
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    names = z.namelist()
+    assert any(n.endswith(".md") for n in names)
+    assert b"zipped result" in z.read(names[0])
+
+
+def test_project_zip_skips_processing_documents(client):
+    """ZIP не включает документы со статусом != done."""
+    p = client.post("/api/projects", json={"name": "MixedZip"}).json()
+    done_doc = _upload(client, name="a.pdf", project_id=p["id"]).json()[0]
+    queued_doc = _upload(client, name="b.pdf", project_id=p["id"]).json()[0]
+    _force_done(done_doc["id"], "# only this", "md")
+
+    r = client.get(f"/api/projects/{p['id']}/zip")
+    assert r.status_code == 200
+    import io, zipfile
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    names = z.namelist()
+    assert len(names) == 1
+    assert "a" in names[0]
+
+
+def test_project_zip_404_on_missing_project(client):
+    r = client.get("/api/projects/99999/zip")
+    assert r.status_code == 404
