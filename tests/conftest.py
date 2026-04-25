@@ -2,7 +2,6 @@
 Общие pytest-фикстуры для backend-тестов.
 Редактирование: добавлять фикстуры, не удалять существующие без согласования.
 """
-import os
 import shutil
 import tempfile
 from pathlib import Path
