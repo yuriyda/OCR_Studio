@@ -6,6 +6,8 @@
 - Не использовать sqlite_connection напрямую из main.py или роутов.
 - Даты сохраняются и читаются как ISO-8601 UTC через datetime.
 """
+from __future__ import annotations
+
 import sqlite3
 from datetime import datetime, timezone
 from typing import Optional
@@ -87,3 +89,106 @@ class ProjectRepo:
             raise ProjectError("Inbox cannot be deleted")
         self.conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
         self.conn.commit()
+
+
+ALLOWED_SORT = {"created": "created_at", "name": "filename", "size": "size_bytes"}
+
+
+class DocumentRepo:
+    """CRUD-репозиторий для таблицы documents.
+
+    Правила редактирования:
+    - Все колонки сортировки проверяются через ALLOWED_SORT (защита от SQL-инъекций).
+    - Метод update() принимает только именованные аргументы; пустой вызов — no-op.
+    - Каскадное удаление документов при удалении проекта обеспечивается ON DELETE CASCADE в схеме БД.
+    """
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self.conn = conn
+
+    def create(
+        self,
+        doc_id: str,
+        project_id: int,
+        filename: str,
+        format: str,
+        lang: str,
+        size_bytes: int,
+    ) -> dict:
+        self.conn.execute(
+            """INSERT INTO documents
+               (id, project_id, filename, format, lang, status, created_at, size_bytes)
+               VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)""",
+            (doc_id, project_id, filename, format, lang, _now_iso(), size_bytes),
+        )
+        self.conn.commit()
+        return self.get(doc_id)
+
+    def get(self, doc_id: str) -> Optional[dict]:
+        row = self.conn.execute(
+            "SELECT * FROM documents WHERE id = ?", (doc_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def list(
+        self,
+        project_id: Optional[int] = None,
+        sort: str = "created",
+        order: str = "desc",
+    ) -> list[dict]:
+        sort_col = ALLOWED_SORT.get(sort, "created_at")
+        order_sql = "ASC" if order.lower() == "asc" else "DESC"
+        if project_id is not None:
+            rows = self.conn.execute(
+                f"SELECT * FROM documents WHERE project_id = ? "
+                f"ORDER BY {sort_col} {order_sql}",
+                (project_id,),
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                f"SELECT * FROM documents ORDER BY {sort_col} {order_sql}"
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def list_all_ids(self) -> list[str]:
+        rows = self.conn.execute("SELECT id FROM documents").fetchall()
+        return [r["id"] for r in rows]
+
+    def update(self, doc_id: str, **fields) -> None:
+        if not fields:
+            return
+        sets = ", ".join(f"{k} = ?" for k in fields)
+        params = list(fields.values()) + [doc_id]
+        self.conn.execute(f"UPDATE documents SET {sets} WHERE id = ?", params)
+        self.conn.commit()
+
+    def move(self, doc_id: str, new_project_id: int) -> None:
+        self.conn.execute(
+            "UPDATE documents SET project_id = ? WHERE id = ?",
+            (new_project_id, doc_id),
+        )
+        self.conn.commit()
+
+    def delete(self, doc_id: str) -> None:
+        self.conn.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
+        self.conn.commit()
+
+    def recover_processing(self) -> int:
+        cur = self.conn.execute(
+            "UPDATE documents SET status = 'queued' WHERE status = 'processing'"
+        )
+        self.conn.commit()
+        return cur.rowcount
+
+    def total_bytes(self, project_id: int) -> int:
+        row = self.conn.execute(
+            "SELECT COALESCE(SUM(size_bytes), 0) AS s FROM documents WHERE project_id = ?",
+            (project_id,),
+        ).fetchone()
+        return int(row["s"])
+
+    def queued_ids_in_order(self) -> list[str]:
+        rows = self.conn.execute(
+            "SELECT id FROM documents WHERE status = 'queued' ORDER BY created_at ASC"
+        ).fetchall()
+        return [r["id"] for r in rows]
