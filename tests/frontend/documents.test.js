@@ -46,8 +46,17 @@ describe('documents', () => {
       { id: 'a1', filename: 'x.pdf', status: 'done', format: 'md' },
       { id: 'b2', filename: 'y.pdf', status: 'done', format: 'docx' },
     ], null);
-    expect(container.textContent).toContain('md');
-    expect(container.textContent).toContain('docx');
+    const badges = container.querySelectorAll('.format-badge');
+    expect(badges.length).toBe(2);
+    expect(badges[0].textContent).toBe('md');
+    expect(badges[1].textContent).toBe('docx');
+  });
+
+  it('omits format badge when format is missing', () => {
+    renderDocuments(container, [
+      { id: 'a1', filename: 'x.pdf', status: 'done' },
+    ], null);
+    expect(container.querySelectorAll('.format-badge').length).toBe(0);
   });
 });
 
