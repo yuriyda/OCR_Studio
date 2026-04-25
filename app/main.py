@@ -54,7 +54,7 @@ async def lifespan(app: FastAPI):
         conn.close()
     asyncio.create_task(worker())
     asyncio.create_task(orphan_cleanup_loop())
-    asyncio.get_event_loop().run_in_executor(None, ocr_engine.get_engine)
+    asyncio.get_running_loop().run_in_executor(None, ocr_engine.get_engine)
     yield
     # Shutdown — worker и cleanup_loop падают вместе с процессом
 
