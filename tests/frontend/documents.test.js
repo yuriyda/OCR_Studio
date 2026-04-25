@@ -58,6 +58,14 @@ describe('documents', () => {
     ], null);
     expect(container.querySelectorAll('.format-badge').length).toBe(0);
   });
+
+  it('shows elapsed time and page counter for processing doc', () => {
+    renderDocuments(container, [
+      { id: 'a1', filename: 'x.pdf', status: 'processing', progress_percent: 50, current_page: 5, page_count: 10, elapsed_seconds: 65, eta_seconds: 65 },
+    ], null);
+    expect(container.textContent).toMatch(/1:05/);
+    expect(container.textContent).toContain('5/10');
+  });
 });
 
 describe('documents.applySort', () => {

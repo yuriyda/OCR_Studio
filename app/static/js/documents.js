@@ -19,6 +19,18 @@ function escHtml(s) {
 }
 
 /**
+ * Форматирует секунды в строку M:SS.
+ * @param {number|null} sec
+ * @returns {string}
+ */
+function fmtTime(sec) {
+  if (sec == null || sec < 0) return '';
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+/**
  * Отрисовывает список документов в переданный контейнер.
  * @param {HTMLElement} container — целевой DOM-элемент
  * @param {Array} docs — массив объектов документов
@@ -33,10 +45,12 @@ export function renderDocuments(container, docs, activeId) {
     const active = d.id === activeId ? 'active' : '';
     let progress = '';
     if (d.status === 'processing') {
+      const pages = (d.current_page != null && d.page_count) ? `<span class="page-counter">${d.current_page}/${d.page_count}</span>` : '';
+      const elapsed = d.elapsed_seconds != null ? `<span class="elapsed">${fmtTime(d.elapsed_seconds)}</span>` : '';
       if (d.progress_percent != null) {
-        progress = `<div class="progress-bar"><div class="progress-fill" style="width:${d.progress_percent}%"></div></div>`;
+        progress = `${pages}<div class="progress-bar"><div class="progress-fill" style="width:${d.progress_percent}%"></div></div>${elapsed}`;
       } else {
-        progress = '<span class="spinner"></span>';
+        progress = `${pages}<span class="spinner"></span>${elapsed}`;
       }
     }
     const isProcessing = d.status === 'processing';
