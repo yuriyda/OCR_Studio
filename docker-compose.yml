@@ -1,0 +1,20 @@
+services:
+  ocr:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - paddle-models:/root/.paddlex
+      - ./data:/app/data
+    environment:
+      - OCR_DATA_DIR=/app/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  paddle-models:
