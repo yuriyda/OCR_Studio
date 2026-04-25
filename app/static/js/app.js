@@ -11,6 +11,7 @@ import { renderPreview } from './preview.js';
 import { renderStatusBar } from './statusbar.js';
 import { showMenu } from './menu.js';
 import { getCopyText } from './clipboard.js';
+import { filterBySize, formatTooLargeMessage } from './validation.js';
 
 async function getCopyTextForDoc(docId) {
   const doc = docsCache.find(d => d.id === docId);
@@ -34,13 +35,9 @@ async function refreshLimits() {
 }
 
 function checkSize(files) {
-  const max = limitsCache.max_file_size_bytes || (50 * 1024 * 1024);
-  const tooLarge = files.filter(f => f.size > max);
-  if (tooLarge.length) {
-    const names = tooLarge.map(f => `${f.name} (${(f.size / 1024 / 1024).toFixed(1)} MB)`).join(', ');
-    alert(`Слишком большие файлы (макс ${Math.round(max/1024/1024)} MB): ${names}`);
-  }
-  return files.filter(f => f.size <= max);
+  return filterBySize(files, limitsCache.max_file_size_bytes, (tooLarge, max) => {
+    alert(formatTooLargeMessage(tooLarge, max));
+  });
 }
 
 async function refreshProjects() {
