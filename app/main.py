@@ -349,6 +349,40 @@ async def delete_project(project_id: int):
         conn.close()
 
 
+@app.patch("/api/documents/{doc_id}")
+async def patch_document(doc_id: str, payload: dict = Body(...)):
+    conn = _conn()
+    try:
+        doc_repo = DocumentRepo(conn)
+        doc = doc_repo.get(doc_id)
+        if not doc:
+            raise HTTPException(404, "Document not found")
+        if "project_id" in payload:
+            new_pid = int(payload["project_id"])
+            if ProjectRepo(conn).get(new_pid) is None:
+                raise HTTPException(400, f"Project {new_pid} not found")
+            doc_repo.move(doc_id, new_pid)
+        return _doc_response(doc_repo.get(doc_id))
+    finally:
+        conn.close()
+
+
+@app.delete("/api/documents/{doc_id}", status_code=204)
+async def delete_document(doc_id: str):
+    conn = _conn()
+    try:
+        doc_repo = DocumentRepo(conn)
+        doc = doc_repo.get(doc_id)
+        if not doc:
+            raise HTTPException(404, "Document not found")
+        if doc["status"] == "processing":
+            raise HTTPException(409, "document is being processed, wait")
+        doc_repo.delete(doc_id)
+        files.delete_doc_dir(DATA_DIR, doc_id)
+    finally:
+        conn.close()
+
+
 @app.get("/api/preview/{doc_id}")
 async def preview_pages(doc_id: str):
     import base64

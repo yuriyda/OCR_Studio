@@ -6,6 +6,7 @@ Integration-тесты API через FastAPI TestClient.
 - OCR-движок всегда мокается, чтобы не грузить PaddleOCR в тестовой среде.
 - При добавлении новых роутов — добавлять соответствующие тесты здесь.
 """
+import asyncio
 import importlib
 import io
 import sys
@@ -36,8 +37,12 @@ def client(tmp_data_dir, monkeypatch):
         if mod.startswith("app"):
             del sys.modules[mod]
 
+    async def _noop_worker():
+        await asyncio.sleep(3600)  # не обрабатывает очередь в тестах
+
     with patch("app.ocr_engine.process_file", return_value="# stub"), \
-         patch("app.ocr_engine.get_engine"):
+         patch("app.ocr_engine.get_engine"), \
+         patch("app.main.worker", _noop_worker):
         from app import main
         main.DATA_DIR = tmp_data_dir
         main.DB_PATH = tmp_data_dir / "data.db"
@@ -141,3 +146,35 @@ def test_status_filter_by_project(client):
     docs = r.json()
     assert all(d["project_id"] == p["id"] for d in docs)
     assert {d["filename"] for d in docs} == {"y.pdf"}
+
+
+def test_move_document(client):
+    p = client.post("/api/projects", json={"name": "Target"}).json()
+    upload = _upload(client).json()
+    doc_id = upload[0]["id"]
+    r = client.patch(f"/api/documents/{doc_id}", json={"project_id": p["id"]})
+    assert r.status_code == 200
+    assert r.json()["project_id"] == p["id"]
+
+
+def test_move_to_missing_project_400(client):
+    upload = _upload(client).json()
+    r = client.patch(f"/api/documents/{upload[0]['id']}", json={"project_id": 99999})
+    assert r.status_code == 400
+
+
+def test_delete_document(client):
+    upload = _upload(client).json()
+    r = client.delete(f"/api/documents/{upload[0]['id']}")
+    assert r.status_code == 204
+
+
+def test_delete_processing_document_409(client):
+    upload = _upload(client).json()
+    from app import db, main
+    from app.storage import DocumentRepo
+    conn = db.get_connection(main.DB_PATH)
+    DocumentRepo(conn).update(upload[0]["id"], status="processing")
+    conn.close()
+    r = client.delete(f"/api/documents/{upload[0]['id']}")
+    assert r.status_code == 409
