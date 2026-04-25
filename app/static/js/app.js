@@ -9,6 +9,7 @@ import { handleDrop, startDocDrag } from './drag.js';
 import { Polling } from './polling.js';
 import { renderPreview } from './preview.js';
 import { renderStatusBar } from './statusbar.js';
+import { showMenu } from './menu.js';
 import { getCopyText } from './clipboard.js';
 
 async function getCopyTextForDoc(docId) {
@@ -216,53 +217,75 @@ async function uploadFiles(filesList, pid) {
   polling.start();
 }
 
-async function handleProjectMenu(id) {
-  const action = prompt('Действие: rename | delete', 'rename');
-  if (action === 'rename') {
-    const newName = prompt('Новое имя');
-    if (newName) {
-      try { await api.renameProject(id, newName); refreshProjects(); }
-      catch (e) { alert(e.message); }
-    }
-  } else if (action === 'delete') {
-    const proj = projectsCache.find(p => p.id === id);
-    if (confirm(`Удалить проект "${proj.name}" и все его документы (${proj.doc_count} шт.)?`)) {
-      try {
-        await api.deleteProject(id);
-        if (state.activeProjectId === id) state.setActiveProject(INBOX_ID);
-        refreshProjects();
-        refreshDocuments();
-      } catch (e) {
-        if (e.status === 409) alert('Дождитесь завершения обработки');
-        else alert(e.message);
-      }
-    }
-  }
+function handleProjectMenu(id) {
+  const proj = projectsCache.find(p => p.id === id);
+  if (!proj) return;
+  const anchor = document.querySelector(`.project-item[data-id="${id}"] .proj-menu`);
+  if (!anchor) return;
+  showMenu(anchor, [
+    {
+      label: 'Переименовать',
+      action: async () => {
+        const newName = prompt('Новое имя проекта', proj.name);
+        if (!newName || newName === proj.name) return;
+        try {
+          await api.renameProject(id, newName);
+          refreshProjects();
+        } catch (e) {
+          alert(e.message);
+        }
+      },
+    },
+    {
+      label: 'Удалить проект',
+      action: async () => {
+        if (!confirm(`Удалить проект "${proj.name}" и все его документы (${proj.doc_count} шт.)?`)) return;
+        try {
+          await api.deleteProject(id);
+          if (state.activeProjectId === id) state.setActiveProject(INBOX_ID);
+          refreshProjects();
+          refreshDocuments();
+        } catch (e) {
+          if (e.status === 409) alert('Дождитесь завершения обработки');
+          else alert(e.message);
+        }
+      },
+    },
+  ]);
 }
 
-async function handleDocMenu(docId) {
-  const action = prompt('Действие: move | delete', 'move');
-  if (action === 'move') {
-    const targetName = prompt(`Целевой проект (${projectsCache.map(p => p.name).join(', ')})`);
-    const target = projectsCache.find(p => p.name === targetName);
-    if (target) {
-      await api.moveDocument(docId, target.id);
-      refreshProjects();
-      refreshDocuments();
-    }
-  } else if (action === 'delete') {
-    const doc = docsCache.find(d => d.id === docId);
-    if (confirm(`Удалить "${doc.filename}"?`)) {
-      try {
-        await api.deleteDocument(docId);
-        if (selectedDocId === docId) selectedDocId = null;
+function handleDocMenu(docId) {
+  const doc = docsCache.find(d => d.id === docId);
+  if (!doc) return;
+  const anchor = document.querySelector(`.doc-item[data-id="${docId}"] .doc-menu`);
+  if (!anchor) return;
+  const moveItems = projectsCache
+    .filter(p => p.id !== doc.project_id)
+    .map(p => ({
+      label: `Переместить → ${p.name}`,
+      action: async () => {
+        await api.moveDocument(docId, p.id);
+        refreshProjects();
         refreshDocuments();
-      } catch (e) {
-        if (e.status === 409) alert('Дождитесь завершения обработки');
-        else alert(e.message);
-      }
-    }
-  }
+      },
+    }));
+  showMenu(anchor, [
+    ...moveItems,
+    {
+      label: 'Удалить',
+      action: async () => {
+        if (!confirm(`Удалить "${doc.filename}"?`)) return;
+        try {
+          await api.deleteDocument(docId);
+          if (selectedDocId === docId) selectedDocId = null;
+          refreshDocuments();
+        } catch (e) {
+          if (e.status === 409) alert('Дождитесь завершения обработки');
+          else alert(e.message);
+        }
+      },
+    },
+  ]);
 }
 
 state.load();
