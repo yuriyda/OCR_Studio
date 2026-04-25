@@ -95,9 +95,11 @@ async function loadPagePreviews(docId) {
   try {
     const data = await api.getPreview(docId);
     previewPagesCache.set(docId, { pages: data.pages });
-    renderThumbnailBar(docId);
+    if (selectedDocId === docId) renderThumbnailBar(docId);
   } catch {
-    bar.innerHTML = '<span style="color:var(--text2);font-size:0.8rem;">Превью недоступно</span>';
+    if (selectedDocId === docId) {
+      bar.innerHTML = '<span style="color:var(--text2);font-size:0.8rem;">Превью недоступно</span>';
+    }
   }
 }
 
