@@ -23,6 +23,25 @@ let docsCache = [];
 let selectedDocId = null;
 let previewMode = 'source';
 let envCache = { gpu: null, cuda: null, vram_gb: null };
+let limitsCache = { max_file_size_bytes: 50 * 1024 * 1024 };
+
+async function refreshLimits() {
+  try {
+    limitsCache = await api.getLimits();
+    const mb = Math.round(limitsCache.max_file_size_bytes / (1024 * 1024));
+    $('dropzone-limits').textContent = `Максимум ${mb} MB на файл`;
+  } catch {}
+}
+
+function checkSize(files) {
+  const max = limitsCache.max_file_size_bytes || (50 * 1024 * 1024);
+  const tooLarge = files.filter(f => f.size > max);
+  if (tooLarge.length) {
+    const names = tooLarge.map(f => `${f.name} (${(f.size / 1024 / 1024).toFixed(1)} MB)`).join(', ');
+    alert(`Слишком большие файлы (макс ${Math.round(max/1024/1024)} MB): ${names}`);
+  }
+  return files.filter(f => f.size <= max);
+}
 
 async function refreshProjects() {
   projectsCache = await api.listProjects();
@@ -123,7 +142,10 @@ function bindUI() {
     const item = e.target.closest('.project-item');
     if (!item) return;
     handleDrop(e, Number(item.dataset.id), {
-      onUpload: (files, pid) => uploadFiles(files, pid),
+      onUpload: (files, pid) => {
+        const ok = checkSize(files);
+        if (ok.length) uploadFiles(ok, pid);
+      },
       onMove: async (docId, pid) => {
         await api.moveDocument(docId, pid);
         refreshProjects();
@@ -166,11 +188,16 @@ function bindUI() {
   $('tab-source').addEventListener('click', () => { previewMode = 'source'; selectDocument(selectedDocId); });
   $('tab-rendered').addEventListener('click', () => { previewMode = 'rendered'; selectDocument(selectedDocId); });
 
+  $('lang-select').addEventListener('change', () => refreshSystem());
+
   const dropzone = $('dropzone');
   const fileInput = $('file-input');
   dropzone.addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', () => {
-    if (fileInput.files.length) uploadFiles(fileInput.files, state.activeProjectId);
+    if (fileInput.files.length) {
+      const files = checkSize(Array.from(fileInput.files));
+      if (files.length) uploadFiles(files, state.activeProjectId);
+    }
     fileInput.value = '';
   });
   dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('drag-over'); });
@@ -178,7 +205,10 @@ function bindUI() {
   dropzone.addEventListener('drop', (e) => {
     dropzone.classList.remove('drag-over');
     handleDrop(e, state.activeProjectId, {
-      onUpload: (files, pid) => uploadFiles(files, pid),
+      onUpload: (files, pid) => {
+        const ok = checkSize(files);
+        if (ok.length) uploadFiles(ok, pid);
+      },
       onMove: async () => {},
     });
   });
@@ -298,3 +328,4 @@ refreshProjects().then(() => {
   refreshDocuments();
   polling.start();
 });
+refreshLimits();

@@ -428,3 +428,11 @@ def test_status_elapsed_none_when_not_started(client):
     target = next(d for d in docs if d["id"] == upload[0]["id"])
     assert target["elapsed_seconds"] is None
     assert target["eta_seconds"] is None
+
+
+def test_limits_endpoint(client):
+    r = client.get("/api/limits")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["max_file_size_bytes"] == 50 * 1024 * 1024
+    assert ".pdf" in body["allowed_extensions"]

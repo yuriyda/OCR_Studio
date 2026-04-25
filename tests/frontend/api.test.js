@@ -46,4 +46,10 @@ describe('api', () => {
   it('projectZipUrl returns correct path', () => {
     expect(api.projectZipUrl(7)).toBe('/api/projects/7/zip');
   });
+
+  it('getLimits calls /api/limits', async () => {
+    fetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+    await api.getLimits();
+    expect(fetch).toHaveBeenCalledWith('/api/limits');
+  });
 });

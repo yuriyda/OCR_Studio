@@ -429,6 +429,15 @@ async def system_info():
     return sys_info.get_system_info(engine_status=status, engine_lang=lang)
 
 
+@app.get("/api/limits")
+async def get_limits():
+    """Информация о лимитах для UI (показ заранее)."""
+    return {
+        "max_file_size_bytes": MAX_FILE_SIZE,
+        "allowed_extensions": sorted(ALLOWED_EXTENSIONS),
+    }
+
+
 from . import preview as _preview
 
 
