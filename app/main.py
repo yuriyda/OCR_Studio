@@ -490,16 +490,19 @@ async def download_project_zip(project_id: int):
         if not done_docs:
             raise HTTPException(404, "No completed documents in project")
 
+        # Архив собирается целиком в RAM (BytesIO). Допустимо при текущих лимитах
+        # MAX_FILE_SIZE × число документов; если проекты вырастут до сотен мегабайт —
+        # перейти на SpooledTemporaryFile или генератор-стриминг.
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             seen_names: set[str] = set()
             for d in done_docs:
                 path = files.result_path(DATA_DIR, d["id"])
                 if not path or not path.exists():
+                    logger.warning("doc %s status=done but result file missing — skipped from zip", d["id"])
                     continue
                 stem = Path(d["filename"]).stem
                 arcname = f"{stem}{path.suffix}"
-                base_arc = arcname
                 counter = 1
                 while arcname in seen_names:
                     arcname = f"{stem}_{counter}{path.suffix}"

@@ -384,3 +384,18 @@ def test_project_zip_skips_processing_documents(client):
 def test_project_zip_404_on_missing_project(client):
     r = client.get("/api/projects/99999/zip")
     assert r.status_code == 404
+
+
+def test_project_zip_disambiguates_duplicate_filenames(client):
+    """Два done-документа с одинаковым stem → второй получает суффикс _1."""
+    p = client.post("/api/projects", json={"name": "Dups"}).json()
+    a = _upload(client, name="report.pdf", project_id=p["id"]).json()[0]
+    b = _upload(client, name="report.pdf", project_id=p["id"]).json()[0]
+    _force_done(a["id"], "# first", "md")
+    _force_done(b["id"], "# second", "md")
+    r = client.get(f"/api/projects/{p['id']}/zip")
+    assert r.status_code == 200
+    import io, zipfile
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    names = sorted(z.namelist())
+    assert names == ["report.md", "report_1.md"]
