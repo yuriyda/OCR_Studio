@@ -63,8 +63,25 @@ async def worker():
 
             try:
                 original = files.original_path(DATA_DIR, doc_id)
+
+                def _progress(cur, total):
+                    pcent = round(100.0 * cur / total, 1) if total else None
+                    cb_conn = _conn()
+                    try:
+                        DocumentRepo(cb_conn).update(
+                            doc_id,
+                            current_page=cur,
+                            page_count=total,
+                            progress_percent=pcent,
+                        )
+                    finally:
+                        cb_conn.close()
+
                 md = await asyncio.to_thread(
-                    ocr_engine.process_file, str(original), doc["lang"]
+                    ocr_engine.process_file,
+                    str(original),
+                    doc["lang"],
+                    _progress,
                 )
                 fmt = doc["format"]
                 if fmt == "md":

@@ -306,3 +306,49 @@ def test_ghost_record_marked_error(client, tmp_data_dir):
     r = client.get("/api/status").json()
     target = next(d for d in r if d["id"] == doc_id)
     assert target["status"] == "error"
+
+
+def test_page_progress_updates_during_processing(tmp_data_dir, monkeypatch):
+    """progress_percent обновляется через callback при OCR PDF."""
+    from unittest.mock import patch
+    from app import main, db
+    from app.storage import DocumentRepo
+
+    _stub_paddleocr_modules()
+    for mod in list(sys.modules.keys()):
+        if mod.startswith("app"):
+            del sys.modules[mod]
+
+    from app import main, db
+    from app.storage import DocumentRepo
+
+    main.DATA_DIR = tmp_data_dir
+    main.DB_PATH = tmp_data_dir / "data.db"
+
+    captured_pcent = []
+
+    def fake_process(path, lang, progress_callback=None):
+        if progress_callback:
+            progress_callback(1, 4)
+            conn = db.get_connection(main.DB_PATH)
+            doc_id = list(DocumentRepo(conn).list_all_ids())[0]
+            captured_pcent.append(DocumentRepo(conn).get(doc_id)["progress_percent"])
+            conn.close()
+            progress_callback(4, 4)
+        return "# stub"
+
+    with patch("app.ocr_engine.process_file", side_effect=fake_process), \
+         patch("app.ocr_engine.get_engine"):
+        with TestClient(main.app) as c:
+            r = _upload(c)
+            doc_id = r.json()[0]["id"]
+            import time
+            for _ in range(50):
+                time.sleep(0.1)
+                conn = db.get_connection(main.DB_PATH)
+                if DocumentRepo(conn).get(doc_id)["status"] == "done":
+                    conn.close()
+                    break
+                conn.close()
+
+    assert captured_pcent and captured_pcent[0] == 25.0
