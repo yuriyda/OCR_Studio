@@ -57,4 +57,30 @@ describe('toast', () => {
     dismiss();
     expect(document.querySelectorAll('.toast').length).toBe(0);
   });
+
+  it('caps stack at MAX_TOASTS=5 and drops oldest', () => {
+    for (let i = 0; i < 7; i++) toast.show(`msg-${i}`);
+    const items = document.querySelectorAll('.toast');
+    expect(items.length).toBe(5);
+    expect(items[0].textContent).toBe('msg-2');
+    expect(items[4].textContent).toBe('msg-6');
+  });
+
+  it('error toast gets role="alert"', () => {
+    toast.show('Bad', 'error');
+    const t = document.querySelector('.toast.error');
+    expect(t.getAttribute('role')).toBe('alert');
+  });
+
+  it('non-error toast gets role="status"', () => {
+    toast.show('OK', 'success');
+    const t = document.querySelector('.toast.success');
+    expect(t.getAttribute('role')).toBe('status');
+  });
+
+  it('container has aria-live polite', () => {
+    toast.show('X');
+    const c = document.getElementById('toast-container');
+    expect(c.getAttribute('aria-live')).toBe('polite');
+  });
 });
