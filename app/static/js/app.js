@@ -22,7 +22,8 @@ const $ = (id) => document.getElementById(id);
 let projectsCache = [];
 let docsCache = [];
 let selectedDocId = null;
-let previewMode = 'source';
+let previewMode = 'pages';
+let selectedPageIdx = 0;
 let envCache = { gpu: null, cuda: null, vram_gb: null };
 let limitsCache = { max_file_size_bytes: 50 * 1024 * 1024 };
 
@@ -80,34 +81,56 @@ function refreshStatusBar(systemInfo) {
   });
 }
 
-const previewPagesCache = new Map();
+const previewPagesCache = new Map(); // docId → { pages: [b64...] }
 
 async function loadPagePreviews(docId) {
   const bar = $('preview-bar');
   if (!docId) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
   bar.style.display = 'flex';
   if (previewPagesCache.has(docId)) {
-    bar.innerHTML = previewPagesCache.get(docId);
+    renderThumbnailBar(docId);
     return;
   }
   bar.innerHTML = '<span class="spinner"></span>';
   try {
     const data = await api.getPreview(docId);
-    const html = data.pages.map((b64, i) =>
-      `<img src="data:image/jpeg;base64,${b64}" alt="Page ${i+1}" title="Page ${i+1}">`
-    ).join('');
-    previewPagesCache.set(docId, html);
-    bar.innerHTML = html;
+    previewPagesCache.set(docId, { pages: data.pages });
+    renderThumbnailBar(docId);
   } catch {
     bar.innerHTML = '<span style="color:var(--text2);font-size:0.8rem;">Превью недоступно</span>';
   }
 }
 
+function renderThumbnailBar(docId) {
+  const bar = $('preview-bar');
+  const cached = previewPagesCache.get(docId);
+  if (!cached) { bar.innerHTML = ''; return; }
+  bar.innerHTML = cached.pages.map((b64, i) => {
+    const sel = i === selectedPageIdx ? 'selected' : '';
+    return `<img class="${sel}" data-idx="${i}" src="data:image/jpeg;base64,${b64}" alt="Page ${i+1}" title="Page ${i+1}">`;
+  }).join('');
+}
+
 async function selectDocument(docId) {
+  if (selectedDocId !== docId) {
+    selectedPageIdx = 0;
+  }
   selectedDocId = docId;
-  const doc = docsCache.find(d => d.id === docId);
-  loadPagePreviews(docId);
-  await renderPreview($('result-area'), doc, previewMode, api);
+  await loadPagePreviews(docId);
+  await rerenderResultArea();
+}
+
+async function rerenderResultArea() {
+  const doc = docsCache.find(d => d.id === selectedDocId);
+  let pageData = null;
+  if (previewMode === 'pages' && selectedDocId) {
+    const cached = previewPagesCache.get(selectedDocId);
+    if (cached) pageData = { pages: cached.pages, selectedIdx: selectedPageIdx };
+  }
+  await renderPreview($('result-area'), doc, previewMode, api, pageData);
+  $('tab-pages').classList.toggle('active', previewMode === 'pages');
+  $('tab-source').classList.toggle('active', previewMode === 'source');
+  $('tab-rendered').classList.toggle('active', previewMode === 'rendered');
 }
 
 const polling = new Polling(async (pid) => {
@@ -182,8 +205,18 @@ function bindUI() {
     refreshDocuments();
   });
 
-  $('tab-source').addEventListener('click', () => { previewMode = 'source'; selectDocument(selectedDocId); });
-  $('tab-rendered').addEventListener('click', () => { previewMode = 'rendered'; selectDocument(selectedDocId); });
+  $('tab-pages').addEventListener('click', () => { previewMode = 'pages'; rerenderResultArea(); });
+  $('tab-source').addEventListener('click', () => { previewMode = 'source'; rerenderResultArea(); });
+  $('tab-rendered').addEventListener('click', () => { previewMode = 'rendered'; rerenderResultArea(); });
+
+  $('preview-bar').addEventListener('click', (e) => {
+    if (e.target.tagName === 'IMG' && e.target.dataset.idx != null) {
+      selectedPageIdx = Number(e.target.dataset.idx);
+      previewMode = 'pages';
+      renderThumbnailBar(selectedDocId);
+      rerenderResultArea();
+    }
+  });
 
   $('lang-select').addEventListener('change', () => refreshSystem());
 

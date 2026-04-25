@@ -30,4 +30,24 @@ describe('preview', () => {
   it('does not call client-side markdown library', async () => {
     expect(true).toBe(true);
   });
+
+  it('pages mode shows large image of selected page', async () => {
+    const pageData = { pages: ['BASE64_A', 'BASE64_B', 'BASE64_C'], selectedIdx: 1 };
+    await renderPreview(container, { id: 'a', format: 'md' }, 'pages', null, pageData);
+    const img = container.querySelector('img.page-large');
+    expect(img).toBeTruthy();
+    expect(img.src).toContain('BASE64_B');
+  });
+
+  it('pages mode without data shows empty state', async () => {
+    await renderPreview(container, { id: 'a', format: 'md' }, 'pages', null, { pages: [] });
+    expect(container.textContent).toMatch(/недоступн/i);
+  });
+
+  it('pages mode default selectedIdx is 0', async () => {
+    const pageData = { pages: ['FIRST', 'SECOND'] };
+    await renderPreview(container, { id: 'a', format: 'md' }, 'pages', null, pageData);
+    const img = container.querySelector('img.page-large');
+    expect(img.src).toContain('FIRST');
+  });
 });

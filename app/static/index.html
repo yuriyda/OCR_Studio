@@ -50,6 +50,8 @@ header h1 { font-size:1.3rem; font-weight:600; }
 .preview-tabs { display:flex; gap:0; padding:0 12px; background:var(--surface); border-bottom:1px solid var(--border); }
 .preview-tabs button { background:transparent; color:var(--text2); border:none; padding:10px 16px; cursor:pointer; font-size:0.9rem; border-bottom:2px solid transparent; }
 .preview-tabs button.active { color:var(--text); border-bottom-color:var(--accent); }
+.page-large { max-width:100%; max-height:calc(100vh - 250px); border-radius:6px; border:1px solid var(--border); display:block; margin:0 auto; background:#fff; }
+.preview-bar img.selected { border-color:var(--accent); }
 .result-area { flex:1; padding:20px; overflow-y:auto; }
 .result-area pre { white-space:pre-wrap; word-wrap:break-word; font-size:0.85rem; line-height:1.5; font-family:'Cascadia Code','Fira Code',monospace; }
 .result-area .rendered { line-height:1.6; }
@@ -102,7 +104,8 @@ header h1 { font-size:1.3rem; font-weight:600; }
   <div class="content">
     <div class="preview-bar" id="preview-bar" style="display:none;"></div>
     <div class="preview-tabs">
-      <button id="tab-source" class="active">Source</button>
+      <button id="tab-pages" class="active">Pages</button>
+      <button id="tab-source">Source</button>
       <button id="tab-rendered">Rendered</button>
     </div>
     <div class="result-area" id="result-area">
