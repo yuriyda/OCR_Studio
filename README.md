@@ -34,11 +34,20 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 ### Docker
 
+**Предварительно:**
+- Установить [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) — без него `docker compose up` упадёт на стадии резервирования GPU.
+- Создать `data/` заранее, чтобы Docker не создал её root-владельцем:
+  ```bash
+  mkdir -p data
+  ```
+
+**Запуск:**
+
 ```bash
 docker compose up --build
 ```
 
-После остановки данные сохраняются в `./data/` (bind mount). База `data.db` и папка `data/docs/<doc_id>/` переживают `docker compose down`.
+После остановки данные сохраняются в `./data/` (bind mount, относительно расположения `docker-compose.yml`). База `data.db` и папка `data/docs/<doc_id>/` переживают `docker compose down`.
 
 ## Архитектура
 
