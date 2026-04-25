@@ -251,3 +251,58 @@ def test_rendered_txt_wraps_pre(client):
     _force_done(upload[0]["id"], "plain\ntext", "txt")
     r = client.get(f"/api/rendered/{upload[0]['id']}")
     assert "<pre>" in r.json()["html"]
+
+
+def test_recovery_on_restart(tmp_data_dir):
+    """Документ в processing → после повторного startup → queued."""
+    from unittest.mock import patch
+    # Полная установка fixture-окружения вручную (для повторного запуска TestClient)
+    with patch("app.ocr_engine.process_file", return_value="# stub"), \
+         patch("app.ocr_engine.get_engine"):
+        from app import main
+        main.DATA_DIR = tmp_data_dir
+        main.DB_PATH = tmp_data_dir / "data.db"
+        # Также мокаем worker, чтобы он не съел очередь между двумя TestClient
+        async def _noop_worker():
+            while True:
+                import asyncio
+                await asyncio.sleep(3600)
+        with patch("app.main.worker", _noop_worker):
+            with TestClient(main.app) as c:
+                upload = _upload(c).json()
+                doc_id = upload[0]["id"]
+                from app import db
+                from app.storage import DocumentRepo
+                conn = db.get_connection(main.DB_PATH)
+                DocumentRepo(conn).update(doc_id, status="processing")
+                conn.close()
+            # Закрыли TestClient — теперь второй запуск (новый startup)
+            with TestClient(main.app) as c:
+                r = c.get("/api/status").json()
+                target = next(d for d in r if d["id"] == doc_id)
+                assert target["status"] in ("queued", "processing", "done")
+
+
+def test_orphan_files_cleaned(client, tmp_data_dir):
+    """FS-папка без записи в БД → удалена run_orphan_cleanup."""
+    orphan = tmp_data_dir / "docs" / "orphan_id"
+    orphan.mkdir()
+    (orphan / "original.pdf").write_bytes(b"x")
+    from app import main
+    result = main.run_orphan_cleanup()
+    assert result["removed_fs"] >= 1
+    assert not orphan.exists()
+
+
+def test_ghost_record_marked_error(client, tmp_data_dir):
+    """Запись в БД без файлов на диске → status=error."""
+    upload = _upload(client).json()
+    doc_id = upload[0]["id"]
+    import shutil
+    shutil.rmtree(tmp_data_dir / "docs" / doc_id, ignore_errors=True)
+    from app import main
+    result = main.run_orphan_cleanup()
+    assert result["marked_ghost"] >= 1
+    r = client.get("/api/status").json()
+    target = next(d for d in r if d["id"] == doc_id)
+    assert target["status"] == "error"
