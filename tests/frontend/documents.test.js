@@ -1,0 +1,66 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import { renderDocuments, applySort } from '../../app/static/js/documents.js';
+
+describe('documents', () => {
+  let container;
+  beforeEach(() => {
+    document.body.innerHTML = '<div id="docs"></div>';
+    container = document.getElementById('docs');
+  });
+
+  it('renders empty state when no docs', () => {
+    renderDocuments(container, [], null);
+    expect(container.textContent).toContain('Перетащите');
+  });
+
+  it('renders status icon and filename', () => {
+    renderDocuments(container, [
+      { id: 'a1', filename: 'x.pdf', status: 'done' },
+    ], null);
+    expect(container.textContent).toContain('x.pdf');
+  });
+
+  it('shows progress bar for processing with percent', () => {
+    renderDocuments(container, [
+      { id: 'a1', filename: 'x.pdf', status: 'processing', progress_percent: 60 },
+    ], null);
+    expect(container.querySelector('.progress-bar')).toBeTruthy();
+  });
+
+  it('shows indeterminate spinner for processing without percent', () => {
+    renderDocuments(container, [
+      { id: 'a1', filename: 'x.pdf', status: 'processing', progress_percent: null },
+    ], null);
+    expect(container.querySelector('.spinner')).toBeTruthy();
+  });
+
+  it('marks active doc', () => {
+    renderDocuments(container, [
+      { id: 'a1', filename: 'x.pdf', status: 'done' },
+    ], 'a1');
+    expect(container.querySelector('.doc-item.active')).toBeTruthy();
+  });
+});
+
+describe('documents.applySort', () => {
+  const docs = [
+    { id: 'a', filename: 'b.pdf', size_bytes: 100, created_at: '2026-04-01T00:00:00+00:00' },
+    { id: 'b', filename: 'a.pdf', size_bytes: 200, created_at: '2026-04-02T00:00:00+00:00' },
+  ];
+
+  it('sort by name asc', () => {
+    expect(applySort(docs, 'name', 'asc').map(d => d.filename)).toEqual(['a.pdf', 'b.pdf']);
+  });
+
+  it('sort by name desc', () => {
+    expect(applySort(docs, 'name', 'desc').map(d => d.filename)).toEqual(['b.pdf', 'a.pdf']);
+  });
+
+  it('sort by size desc', () => {
+    expect(applySort(docs, 'size', 'desc').map(d => d.id)).toEqual(['b', 'a']);
+  });
+
+  it('sort by created desc', () => {
+    expect(applySort(docs, 'created', 'desc').map(d => d.id)).toEqual(['b', 'a']);
+  });
+});
