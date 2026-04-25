@@ -399,3 +399,32 @@ def test_project_zip_disambiguates_duplicate_filenames(client):
     z = zipfile.ZipFile(io.BytesIO(r.content))
     names = sorted(z.namelist())
     assert names == ["report.md", "report_1.md"]
+
+
+def test_status_includes_elapsed_and_eta(client):
+    upload = _upload(client).json()
+    doc_id = upload[0]["id"]
+    from app import db, main
+    from app.storage import DocumentRepo
+    conn = db.get_connection(main.DB_PATH)
+    DocumentRepo(conn).update(
+        doc_id,
+        status="processing",
+        started_at="2026-04-25T10:00:00+00:00",
+        progress_percent=25.0,
+    )
+    conn.close()
+    docs = client.get("/api/status").json()
+    target = next(d for d in docs if d["id"] == doc_id)
+    assert "elapsed_seconds" in target
+    assert "eta_seconds" in target
+    assert target["elapsed_seconds"] is not None and target["elapsed_seconds"] > 0
+    assert target["eta_seconds"] is not None and target["eta_seconds"] > 0
+
+
+def test_status_elapsed_none_when_not_started(client):
+    upload = _upload(client).json()
+    docs = client.get("/api/status").json()
+    target = next(d for d in docs if d["id"] == upload[0]["id"])
+    assert target["elapsed_seconds"] is None
+    assert target["eta_seconds"] is None

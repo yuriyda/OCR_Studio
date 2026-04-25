@@ -227,6 +227,20 @@ async def status(project_id: int | None = None, sort: str = "created", order: st
 
 
 def _doc_response(d: dict) -> dict:
+    elapsed = None
+    eta = None
+    if d.get("started_at"):
+        try:
+            started = datetime.fromisoformat(d["started_at"])
+            now = datetime.now(timezone.utc)
+            elapsed = max(0, int((now - started).total_seconds()))
+            if d.get("status") == "processing" and d.get("progress_percent"):
+                pcent = float(d["progress_percent"])
+                if 0 < pcent < 100:
+                    total_estimate = elapsed * (100.0 / pcent)
+                    eta = max(0, int(total_estimate - elapsed))
+        except (ValueError, TypeError):
+            pass
     return {
         "id": d["id"],
         "filename": d["filename"],
@@ -242,6 +256,8 @@ def _doc_response(d: dict) -> dict:
         "current_page": d["current_page"],
         "progress_percent": d["progress_percent"],
         "size_bytes": d["size_bytes"],
+        "elapsed_seconds": elapsed,
+        "eta_seconds": eta,
     }
 
 
