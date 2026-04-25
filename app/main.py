@@ -12,8 +12,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import time
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -34,9 +34,32 @@ ALLOWED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", 
 DATA_DIR = Path(os.environ.get("OCR_DATA_DIR", "data"))
 DB_PATH = DATA_DIR / "data.db"
 
-app = FastAPI(title="OCR Service")
-
 task_queue: asyncio.Queue = asyncio.Queue()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    (DATA_DIR / "docs").mkdir(exist_ok=True)
+    db.init(DB_PATH)
+    conn = _conn()
+    try:
+        ProjectRepo(conn).ensure_inbox()
+        doc_repo = DocumentRepo(conn)
+        doc_repo.recover_processing()
+        for did in doc_repo.queued_ids_in_order():
+            await task_queue.put(did)
+    finally:
+        conn.close()
+    asyncio.create_task(worker())
+    asyncio.create_task(orphan_cleanup_loop())
+    asyncio.get_event_loop().run_in_executor(None, ocr_engine.get_engine)
+    yield
+    # Shutdown — worker и cleanup_loop падают вместе с процессом
+
+
+app = FastAPI(title="OCR Service", lifespan=lifespan)
 
 
 def _now_iso() -> str:
@@ -134,25 +157,6 @@ def run_orphan_cleanup() -> dict:
         return {"removed_fs": removed_fs, "marked_ghost": marked}
     finally:
         conn.close()
-
-
-@app.on_event("startup")
-async def startup():
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    (DATA_DIR / "docs").mkdir(exist_ok=True)
-    db.init(DB_PATH)
-    conn = _conn()
-    try:
-        ProjectRepo(conn).ensure_inbox()
-        doc_repo = DocumentRepo(conn)
-        doc_repo.recover_processing()
-        for did in doc_repo.queued_ids_in_order():
-            await task_queue.put(did)
-    finally:
-        conn.close()
-    asyncio.create_task(worker())
-    asyncio.create_task(orphan_cleanup_loop())
-    asyncio.get_event_loop().run_in_executor(None, ocr_engine.get_engine)
 
 
 # --- Routes ---
