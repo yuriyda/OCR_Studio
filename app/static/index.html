@@ -66,6 +66,12 @@ header h1 { font-size:1.3rem; font-weight:600; }
 @keyframes spin { to { transform: rotate(360deg); } }
 #statusbar { display:flex; justify-content:space-between; align-items:center; padding:6px 12px; background:var(--surface); border-top:1px solid var(--border); font-size:0.75rem; color:var(--text2); flex-shrink:0; }
 .sb-section { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#toast-container { position:fixed; bottom:20px; right:20px; z-index:2000; display:flex; flex-direction:column; gap:8px; max-width:380px; }
+.toast { background:var(--surface); color:var(--text); border:1px solid var(--border); border-left-width:4px; border-radius:6px; padding:10px 14px; font-size:0.85rem; box-shadow:0 4px 12px rgba(0,0,0,0.3); cursor:pointer; animation:toast-in 0.2s ease-out; }
+.toast.info { border-left-color:var(--text2); }
+.toast.success { border-left-color:var(--success); }
+.toast.error { border-left-color:var(--error); }
+@keyframes toast-in { from { transform:translateX(100%); opacity:0; } to { transform:translateX(0); opacity:1; } }
 </style>
 </head>
 <body>
@@ -115,12 +121,12 @@ header h1 { font-size:1.3rem; font-weight:600; }
       <button class="btn" id="download-btn">Скачать</button>
       <button class="btn" id="copy-btn">Копировать</button>
       <button class="btn" id="batch-zip-btn">Скачать всё (ZIP)</button>
-      <span id="copy-toast" style="color:var(--success);font-size:0.85rem;display:none;">Скопировано</span>
     </div>
   </div>
 </div>
 
 <div id="statusbar"></div>
+<div id="toast-container"></div>
 
 <script type="module" src="/static/js/app.js"></script>
 </body>

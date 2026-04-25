@@ -12,6 +12,7 @@ import { renderStatusBar } from './statusbar.js';
 import { showMenu } from './menu.js';
 import { getCopyText } from './clipboard.js';
 import { filterBySize, formatTooLargeMessage } from './validation.js';
+import { toast } from './toast.js';
 
 async function getCopyTextForDoc(docId) {
   const doc = docsCache.find(d => d.id === docId);
@@ -37,7 +38,7 @@ async function refreshLimits() {
 
 function checkSize(files) {
   return filterBySize(files, limitsCache.max_file_size_bytes, (tooLarge, max) => {
-    alert(formatTooLargeMessage(tooLarge, max));
+    toast.show(formatTooLargeMessage(tooLarge, max), 'error');
   });
 }
 
@@ -183,7 +184,7 @@ function bindUI() {
       await api.createProject(name);
       refreshProjects();
     } catch (e) {
-      alert(e.message);
+      toast.show(e.message, 'error');
     }
   });
 
@@ -254,15 +255,13 @@ function bindUI() {
     try {
       const text = await getCopyTextForDoc(selectedDocId);
       if (!navigator.clipboard) {
-        alert('Буфер обмена недоступен (требуется HTTPS или localhost)');
+        toast.show('Буфер обмена недоступен (требуется HTTPS или localhost)', 'error');
         return;
       }
       await navigator.clipboard.writeText(text);
-      const toast = $('copy-toast');
-      toast.style.display = 'inline';
-      setTimeout(() => { toast.style.display = 'none'; }, 1500);
+      toast.show('Скопировано', 'success');
     } catch (e) {
-      alert('Не удалось скопировать: ' + e.message);
+      toast.show('Не удалось скопировать: ' + e.message, 'error');
     }
   });
 
@@ -294,7 +293,7 @@ function handleProjectMenu(id) {
           await api.renameProject(id, newName);
           refreshProjects();
         } catch (e) {
-          alert(e.message);
+          toast.show(e.message, 'error');
         }
       },
     },
@@ -309,8 +308,8 @@ function handleProjectMenu(id) {
           refreshProjects();
           refreshDocuments();
         } catch (e) {
-          if (e.status === 409) alert('Дождитесь завершения обработки');
-          else alert(e.message);
+          if (e.status === 409) toast.show('Дождитесь завершения обработки', 'error');
+          else toast.show(e.message, 'error');
         }
       },
     },
@@ -344,8 +343,8 @@ function handleDocMenu(docId) {
           if (selectedDocId === docId) selectedDocId = null;
           refreshDocuments();
         } catch (e) {
-          if (e.status === 409) alert('Дождитесь завершения обработки');
-          else alert(e.message);
+          if (e.status === 409) toast.show('Дождитесь завершения обработки', 'error');
+          else toast.show(e.message, 'error');
         }
       },
     },
