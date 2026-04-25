@@ -40,6 +40,15 @@ describe('documents', () => {
     ], 'a1');
     expect(container.querySelector('.doc-item.active')).toBeTruthy();
   });
+
+  it('renders format badge for each doc', () => {
+    renderDocuments(container, [
+      { id: 'a1', filename: 'x.pdf', status: 'done', format: 'md' },
+      { id: 'b2', filename: 'y.pdf', status: 'done', format: 'docx' },
+    ], null);
+    expect(container.textContent).toContain('md');
+    expect(container.textContent).toContain('docx');
+  });
 });
 
 describe('documents.applySort', () => {

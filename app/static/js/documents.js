@@ -41,10 +41,12 @@ export function renderDocuments(container, docs, activeId) {
     }
     const isProcessing = d.status === 'processing';
     const menuDisabled = isProcessing ? 'disabled' : '';
+    const fmt = d.format ? `<span class="format-badge">${escHtml(d.format)}</span>` : '';
     return `
       <div class="doc-item ${active}" data-id="${d.id}" draggable="true">
         <span class="status-icon">${STATUS_ICONS[d.status] || ''}</span>
         <span class="filename">${escHtml(d.filename)}</span>
+        ${fmt}
         ${progress}
         <span class="doc-menu ${menuDisabled}" data-id="${d.id}">⋮</span>
       </div>
