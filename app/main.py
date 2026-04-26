@@ -572,7 +572,16 @@ from . import preview as _preview
 
 
 @app.get("/api/rendered/{doc_id}")
-async def get_rendered(doc_id: str):
+async def get_rendered(doc_id: str, format: str = "md"):
+    """Возвращает HTML rendered для просмотра в Result-pane.
+
+    - format='md'   → markdown library + bleach.
+    - format='docx' → mammoth(result.docx). Если result.docx нет — лениво
+                       генерит из result.md через converters.md_to_docx.
+    - 404 если нужный источник недоступен.
+    """
+    if format not in ("md", "docx"):
+        raise HTTPException(400, f"Invalid format for rendered endpoint: {format}")
     conn = _conn()
     try:
         doc = DocumentRepo(conn).get(doc_id)
@@ -580,20 +589,26 @@ async def get_rendered(doc_id: str):
             raise HTTPException(404, "Document not found")
         if doc["status"] != "done":
             raise HTTPException(400, f"Document status: {doc['status']}")
-        path = files.result_path(DATA_DIR, doc_id)
-        if not path or not path.exists():
-            raise HTTPException(404, "Result file missing")
-        fmt = doc["format"]
-        if fmt == "md":
-            html = _preview.markdown_to_html(path.read_text(encoding="utf-8"))
-        elif fmt == "txt":
-            html = _preview.text_to_html(path.read_text(encoding="utf-8"))
-        elif fmt == "docx":
-            html = _preview.docx_to_html(path.read_bytes())
-        else:
-            raise HTTPException(400, f"Unsupported format: {fmt}")
-        # Фронтенд читает ответ через `_text(resp)` и вставляет в innerHTML.
-        # Возврат JSON ломал бы рендеринг — отдаём raw text/html.
+
+        if format == "md":
+            md_path = files.result_path_for_format(DATA_DIR, doc_id, "md")
+            if md_path is None:
+                raise HTTPException(404, "No markdown source available")
+            html = _preview.markdown_to_html(md_path.read_text(encoding="utf-8"))
+            # Фронтенд читает ответ через `_text(resp)` и вставляет в innerHTML.
+            # Возврат JSON ломал бы рендеринг — отдаём raw text/html.
+            return HTMLResponse(html, media_type="text/html; charset=utf-8")
+
+        # format == "docx"
+        docx_path = files.result_path_for_format(DATA_DIR, doc_id, "docx")
+        if docx_path is None:
+            # Ленивая генерация из result.md
+            md_path = files.result_path_for_format(DATA_DIR, doc_id, "md")
+            if md_path is None:
+                raise HTTPException(404, "No source for docx generation")
+            md_text = md_path.read_text(encoding="utf-8")
+            docx_path = files.save_result(DATA_DIR, doc_id, converters.md_to_docx(md_text), "docx")
+        html = _preview.docx_to_html(docx_path.read_bytes())
         return HTMLResponse(html, media_type="text/html; charset=utf-8")
     finally:
         conn.close()

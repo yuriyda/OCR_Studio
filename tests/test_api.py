@@ -229,21 +229,9 @@ def test_rendered_docx_returns_html(client):
     DocumentRepo(conn).update(upload["ids"][0], format="docx")
     conn.close()
     _force_done(upload["ids"][0], fmt="docx")
-    r = client.get(f"/api/rendered/{upload['ids'][0]}")
+    r = client.get(f"/api/rendered/{upload['ids'][0]}?format=docx")
     assert r.status_code == 200
     assert "<" in r.text
-
-
-def test_rendered_txt_wraps_pre(client):
-    upload = _upload(client).json()
-    from app import db, main
-    from app.storage import DocumentRepo
-    conn = db.get_connection(main.DB_PATH)
-    DocumentRepo(conn).update(upload["ids"][0], format="txt")
-    conn.close()
-    _force_done(upload["ids"][0], "plain\ntext", "txt")
-    r = client.get(f"/api/rendered/{upload['ids'][0]}")
-    assert "<pre>" in r.text
 
 
 def test_recovery_on_restart(tmp_data_dir):
@@ -820,4 +808,48 @@ def test_markdown_endpoint_format_unavailable_for_legacy(client):
     files_mod.save_result(m.DATA_DIR, doc_id, b"PK fake", "docx")
 
     r = client.get(f"/api/markdown/{doc_id}?format=md")
+    assert r.status_code == 404
+
+
+def test_rendered_endpoint_format_md_returns_html_from_markdown(client):
+    """?format=md — markdown → HTML через markdown library + bleach."""
+    upload = _upload(client).json()
+    doc_id = upload["ids"][0]
+    _force_done(doc_id, "# Heading\n\n| a | b |\n| --- | --- |\n| 1 | 2 |", "md")
+    r = client.get(f"/api/rendered/{doc_id}?format=md")
+    assert r.status_code == 200
+    assert "text/html" in r.headers.get("content-type", "")
+    assert "<h1>Heading</h1>" in r.text
+    assert "<table>" in r.text
+
+
+def test_rendered_endpoint_format_docx_lazy_renders_via_mammoth(client):
+    """?format=docx — лениво генерит result.docx, рендерит через mammoth."""
+    from app import files as files_mod
+    import app.main as m
+    upload = _upload(client).json()
+    doc_id = upload["ids"][0]
+    _force_done(doc_id, "# Test heading", "md")
+
+    r = client.get(f"/api/rendered/{doc_id}?format=docx")
+    assert r.status_code == 200
+    assert "text/html" in r.headers.get("content-type", "")
+    assert "<" in r.text
+    assert files_mod.result_path_for_format(m.DATA_DIR, doc_id, "docx") is not None
+
+
+def test_rendered_endpoint_format_unavailable_for_legacy(client):
+    """Legacy с result.txt → ?format=docx → 404 (нет md-источника для генерации)."""
+    from app import files as files_mod
+    import app.main as m
+    upload = _upload(client).json()
+    doc_id = upload["ids"][0]
+    from app.storage import DocumentRepo
+    conn = m._conn()
+    DocumentRepo(conn).update(doc_id, status="done", format="txt")
+    conn.commit()
+    conn.close()
+    files_mod.save_result(m.DATA_DIR, doc_id, "plain", "txt")
+
+    r = client.get(f"/api/rendered/{doc_id}?format=docx")
     assert r.status_code == 404
