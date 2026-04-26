@@ -12,55 +12,86 @@ const baseDoc = (overrides: Partial<Document>): Document => ({
   ...overrides,
 });
 
+const setup = (): { thumbs: HTMLElement; large: HTMLElement } => {
+  document.body.innerHTML = '<div id="thumbs"></div><div id="large"></div>';
+  return {
+    thumbs: document.getElementById('thumbs')!,
+    large: document.getElementById('large')!,
+  };
+};
+
 describe('renderSourcePane', () => {
-  beforeEach(() => { loadLang('ru'); document.body.innerHTML = '<div id="src"></div>'; });
+  beforeEach(() => loadLang('ru'));
 
   it('shows empty state when no doc', () => {
-    renderSourcePane(document.getElementById('src')!, null, null, 0);
-    expect(document.body.textContent).toContain('Выберите документ');
+    const { thumbs, large } = setup();
+    renderSourcePane(thumbs, large, null, null, 0);
+    expect(large.textContent).toContain('Выберите документ');
+    expect(thumbs.style.display).toBe('none');
   });
 
-  it('renders image via /api/source for png', () => {
+  it('renders image via /api/source for png — no thumbs', () => {
+    const { thumbs, large } = setup();
     const doc = baseDoc({ id: '5x', filename: 'photo.png' });
-    renderSourcePane(document.getElementById('src')!, doc, null, 0);
-    const img = document.querySelector('.source-large') as HTMLImageElement;
+    renderSourcePane(thumbs, large, doc, null, 0);
+    const img = large.querySelector('.source-large') as HTMLImageElement;
     expect(img?.getAttribute('src')).toBe('/api/source/5x');
+    expect(thumbs.style.display).toBe('none');
   });
 
   it('renders image via /api/source for JPG (case-insensitive)', () => {
+    const { thumbs, large } = setup();
     const doc = baseDoc({ id: 'j1', filename: 'a.JPG' });
-    renderSourcePane(document.getElementById('src')!, doc, null, 0);
-    expect(document.querySelector('.source-large')?.getAttribute('src')).toBe('/api/source/j1');
+    renderSourcePane(thumbs, large, doc, null, 0);
+    expect(large.querySelector('.source-large')?.getAttribute('src')).toBe('/api/source/j1');
   });
 
-  it('renders pdf page from preview b64 at selected idx', () => {
+  it('PDF: renders thumbnail strip + large page at selected idx', () => {
+    const { thumbs, large } = setup();
     const doc = baseDoc({ id: '7p', filename: 'doc.pdf' });
-    renderSourcePane(document.getElementById('src')!, doc, ['BASE64A', 'BASE64B', 'BASE64C'], 1);
-    const img = document.querySelector('.source-large') as HTMLImageElement;
-    expect(img.src).toContain('BASE64B');
+    renderSourcePane(thumbs, large, doc, ['BASE64A', 'BASE64B', 'BASE64C'], 1);
+    expect(thumbs.style.display).toBe('block');
+    expect(thumbs.querySelectorAll('.source-thumb').length).toBe(3);
+    const active = thumbs.querySelector('.thumb-page-active') as HTMLImageElement;
+    expect(active?.dataset.pageIdx).toBe('1');
+    const largeImg = large.querySelector('.source-large') as HTMLImageElement;
+    expect(largeImg.src).toContain('BASE64B');
   });
 
-  it('clamps selectedPageIdx to valid range', () => {
+  it('PDF: clamps selectedPageIdx to valid range', () => {
+    const { thumbs, large } = setup();
     const doc = baseDoc({ id: '9p', filename: 'doc.pdf' });
-    renderSourcePane(document.getElementById('src')!, doc, ['A', 'B'], 99);
-    expect((document.querySelector('.source-large') as HTMLImageElement).src).toContain('B');
+    renderSourcePane(thumbs, large, doc, ['A', 'B'], 99);
+    expect((large.querySelector('.source-large') as HTMLImageElement).src).toContain('B');
   });
 
-  it('handles negative selectedPageIdx', () => {
+  it('PDF: handles negative selectedPageIdx', () => {
+    const { thumbs, large } = setup();
     const doc = baseDoc({ id: '9p', filename: 'doc.pdf' });
-    renderSourcePane(document.getElementById('src')!, doc, ['A', 'B'], -5);
-    expect((document.querySelector('.source-large') as HTMLImageElement).src).toContain('A');
+    renderSourcePane(thumbs, large, doc, ['A', 'B'], -5);
+    expect((large.querySelector('.source-large') as HTMLImageElement).src).toContain('A');
   });
 
-  it('shows preview.unavailable when PDF has no pages', () => {
+  it('PDF: shows preview.unavailable when pages is empty', () => {
+    const { thumbs, large } = setup();
     const doc = baseDoc({ id: '9p', filename: 'doc.pdf' });
-    renderSourcePane(document.getElementById('src')!, doc, [], 0);
-    expect(document.body.textContent).toContain('Превью недоступно');
+    renderSourcePane(thumbs, large, doc, [], 0);
+    expect(large.textContent).toContain('Превью недоступно');
+    expect(thumbs.style.display).toBe('none');
   });
 
-  it('shows preview.unavailable when PDF pages is null', () => {
+  it('PDF: shows preview.unavailable when pages is null', () => {
+    const { thumbs, large } = setup();
     const doc = baseDoc({ id: '9p', filename: 'doc.pdf' });
-    renderSourcePane(document.getElementById('src')!, doc, null, 0);
-    expect(document.body.textContent).toContain('Превью недоступно');
+    renderSourcePane(thumbs, large, doc, null, 0);
+    expect(large.textContent).toContain('Превью недоступно');
+  });
+
+  it('PDF: thumbnails have data-page-idx for click delegation', () => {
+    const { thumbs, large } = setup();
+    const doc = baseDoc({ id: '9p', filename: 'doc.pdf' });
+    renderSourcePane(thumbs, large, doc, ['A', 'B', 'C'], 0);
+    const items = Array.from(thumbs.querySelectorAll<HTMLImageElement>('.source-thumb'));
+    expect(items.map(t => t.dataset.pageIdx)).toEqual(['0', '1', '2']);
   });
 });

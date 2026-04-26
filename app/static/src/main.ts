@@ -131,7 +131,7 @@ async function selectDocument(docId: string): Promise<void> {
 function rerenderSource(): void {
   const doc = docsCache.find(d => d.id === selectedDocId) ?? null;
   const pages = selectedDocId !== null ? previewPagesCache.get(selectedDocId) ?? null : null;
-  renderSourcePane($('source-area'), doc, pages, selectedPageIdx);
+  renderSourcePane($('source-thumbs'), $('source-large'), doc, pages, selectedPageIdx);
 }
 
 function renderResultTabs(): void {
@@ -250,6 +250,14 @@ function bindUI(): void {
   $('format-select').addEventListener('change', () => {
     renderResultTabs();
     rerenderResult();
+  });
+
+  $('source-thumbs').addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const thumb = target.closest<HTMLElement>('.source-thumb');
+    if (!thumb || !thumb.dataset.pageIdx) return;
+    selectedPageIdx = Number(thumb.dataset.pageIdx);
+    rerenderSource();
   });
 
   const dropzone = $('dropzone');

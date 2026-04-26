@@ -1,12 +1,16 @@
 /**
- * Source pane: рендер исходного документа крупно (PDF страница или изображение).
+ * Source pane: рендер исходного документа.
+ *
+ * Структура: [thumbnail strip слева ~88px] [large page справа].
+ * - Image: strip скрыт, large = <img src="/api/source/{id}">.
+ * - PDF + pages: strip с миниатюрами всех страниц (base64 jpeg), large = выбранная страница.
+ *   Активная миниатюра подсвечена `.thumb-page-active`.
+ *   Click handler привязан в main.ts (event delegation на #source-thumbs).
+ * - PDF без pages → strip скрыт, large = preview.unavailable.
  *
  * Редактирование:
- * - Для image — берём оригинал через /api/source/{id} (Task 11), не превью.
- * - Для PDF — берём страницу из preview b64 массива (preview API возвращает base64 JPEG страниц).
- * - selectedPageIdx clamped в [0, pages.length-1] — UI thumbnail-bar контролирует значение.
- * - Не делать fetch здесь — controller (main.ts) подгружает preview в кэш и передаёт.
- * - i18n строки приходят через t() из i18n.ts.
+ * - Не делать fetch здесь — controller (main.ts) подгружает preview в кэш.
+ * - selectedPageIdx clamped в [0, pages.length-1].
  */
 
 import type { Document } from './types';
@@ -21,29 +25,36 @@ function escHtml(s: string): string {
 }
 
 export function renderSourcePane(
-  container: HTMLElement,
+  thumbsContainer: HTMLElement,
+  largeContainer: HTMLElement,
   doc: Document | null,
   pages: string[] | null,
   selectedPageIdx: number,
 ): void {
   if (!doc) {
-    container.innerHTML = `<div class="text-text-muted text-center py-10">${t('preview.source.empty')}</div>`;
+    thumbsContainer.style.display = 'none';
+    thumbsContainer.innerHTML = '';
+    largeContainer.innerHTML = `<div class="text-text-muted text-center py-10">${t('preview.source.empty')}</div>`;
     return;
   }
   if (IMAGE_EXT.test(doc.filename)) {
-    container.innerHTML = `
-      <div class="flex items-center justify-center h-full p-4">
-        <img src="/api/source/${escHtml(doc.id)}" alt="${escHtml(doc.filename)}" class="source-large max-w-full max-h-full rounded border border-border bg-white" />
-      </div>`;
+    thumbsContainer.style.display = 'none';
+    thumbsContainer.innerHTML = '';
+    largeContainer.innerHTML = `<img src="/api/source/${escHtml(doc.id)}" alt="${escHtml(doc.filename)}" class="source-large max-w-full max-h-full rounded border border-border bg-white" />`;
     return;
   }
+  // PDF
   if (pages && pages.length > 0) {
     const idx = Math.max(0, Math.min(selectedPageIdx, pages.length - 1));
-    container.innerHTML = `
-      <div class="flex items-center justify-center h-full p-4">
-        <img src="data:image/jpeg;base64,${pages[idx]}" alt="page ${idx + 1}" class="source-large max-w-full max-h-full rounded border border-border bg-white" />
-      </div>`;
+    thumbsContainer.style.display = 'block';
+    thumbsContainer.innerHTML = pages.map((b64, i) => {
+      const active = i === idx ? 'thumb-page-active' : '';
+      return `<img class="source-thumb ${active}" data-page-idx="${i}" src="data:image/jpeg;base64,${b64}" alt="page ${i + 1}" />`;
+    }).join('');
+    largeContainer.innerHTML = `<img src="data:image/jpeg;base64,${pages[idx]}" alt="page ${idx + 1}" class="source-large max-w-full max-h-full rounded border border-border bg-white" />`;
     return;
   }
-  container.innerHTML = `<div class="text-text-muted text-center py-10">${t('preview.unavailable')}</div>`;
+  thumbsContainer.style.display = 'none';
+  thumbsContainer.innerHTML = '';
+  largeContainer.innerHTML = `<div class="text-text-muted text-center py-10">${t('preview.unavailable')}</div>`;
 }

@@ -71,12 +71,15 @@
       </div>
     </div>
 
-    <!-- Source pane (Task 22 renderSourcePane mounts here) -->
+    <!-- Source pane (Task 22+8 renderSourcePane mounts thumbs+large) -->
     <div id="pane-source" class="flex flex-col bg-bg overflow-hidden">
       <div class="px-3 py-2 text-xs uppercase text-accent tracking-wider border-b border-border" id="source-header">
         Исходник
       </div>
-      <div id="source-area" class="flex-1 overflow-auto"></div>
+      <div class="flex-1 flex overflow-hidden">
+        <div id="source-thumbs" class="overflow-y-auto bg-surface border-r border-border p-1" style="display:none; min-width:88px; max-width:88px;"></div>
+        <div id="source-large" class="flex-1 overflow-auto flex items-center justify-center p-4"></div>
+      </div>
     </div>
 
     <!-- Result pane: tabs + result-area + actions -->

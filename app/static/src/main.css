@@ -66,6 +66,12 @@
   .badge-done { @apply bg-success/15 text-success border border-success/30; }
   .badge-error { @apply bg-error/15 text-error border border-error/30; }
   .progress-fill { @apply bg-accent-gradient h-full shadow-neon; }
+  .source-thumb {
+    @apply w-full mb-1 cursor-pointer border border-border rounded;
+    transition: border-color 0.1s;
+  }
+  .source-thumb:hover { @apply border-accent; }
+  .thumb-page-active { @apply border-accent shadow-neon; }
 }
 
 @keyframes fade-in {
