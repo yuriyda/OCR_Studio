@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title data-i18n="header.title">OCR Studio</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%237c83fd'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='12' font-weight='700' text-anchor='middle' fill='white'%3EOCR%3C/text%3E%3C/svg%3E" />
+</head>
+<body>
+<div class="flex flex-col h-screen">
+
+  <!-- Header -->
+  <header class="flex items-center justify-between px-5 py-3 glass-panel border-b border-border-accent flex-shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="relative w-9 h-9 rounded-full flex items-center justify-center shadow-neon"
+           style="background: conic-gradient(from 215deg, #7c83fd, #ff6b9d, #7c83fd);">
+        <div class="absolute inset-0.5 rounded-full bg-bg flex items-center justify-center">
+          <span class="font-mono font-bold text-xs text-white tracking-tighter">OCR</span>
+        </div>
+      </div>
+      <div class="flex flex-col leading-tight">
+        <div class="font-bold text-base" data-i18n="header.title">OCR Studio</div>
+        <div class="text-xs text-text-muted" data-i18n="header.tagline">Recognition workspace</div>
+      </div>
+    </div>
+
+    <div class="flex gap-2 items-center">
+      <select id="ui-lang-select" class="pill" title="UI">
+        <option value="ru">RU</option>
+        <option value="en">EN</option>
+      </select>
+      <select id="engine-lang-select" class="pill" title="OCR">
+        <option value="ru" selected>RU</option>
+        <option value="en">EN</option>
+      </select>
+      <select id="format-select" class="pill">
+        <option value="md" selected>MD</option>
+        <option value="txt">TXT</option>
+        <option value="docx">DOCX</option>
+      </select>
+      <button id="recognize-btn" class="cta-primary" disabled>
+        <span data-i18n="header.recognize">Распознать</span>
+        <span id="recognize-counter">· 0</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main 3-pane (split.js will inject gutters) -->
+  <div class="flex-1 flex overflow-hidden" id="main-split">
+    <!-- Sidebar: Projects + Documents + Dropzone -->
+    <div id="pane-sidebar" class="flex flex-col bg-bg-mid">
+      <div class="flex items-center justify-between px-3 py-2 text-xs uppercase text-accent tracking-wider">
+        <span data-i18n="sidebar.projects">Проекты</span>
+        <button id="proj-add-btn" class="text-text" title="+">+</button>
+      </div>
+      <div id="proj-list" class="px-2 overflow-y-auto max-h-48"></div>
+
+      <div class="flex items-center justify-between px-3 py-2 text-xs uppercase text-accent tracking-wider">
+        <span data-i18n="sidebar.documents">Документы</span>
+        <select id="sort-select" class="pill text-xs">
+          <option value="created-desc">Дата ↓</option>
+          <option value="created-asc">Дата ↑</option>
+          <option value="name-asc">Имя А-Я</option>
+          <option value="name-desc">Имя Я-А</option>
+          <option value="size-desc">Размер ↓</option>
+          <option value="size-asc">Размер ↑</option>
+        </select>
+      </div>
+      <div id="doc-list" class="px-2 flex-1 overflow-y-auto"></div>
+
+      <div id="dropzone" class="m-2 p-4 border-2 border-dashed border-border rounded-lg text-center text-text-muted text-sm cursor-pointer hover:border-accent">
+        <div data-i18n="sidebar.dropzone.hint">Перетащите файлы или нажмите для выбора</div>
+        <div id="dropzone-limits" class="text-xs mt-1"></div>
+        <input type="file" id="file-input" multiple accept=".pdf,.png,.jpg,.jpeg,.bmp,.tiff,.tif,.webp" class="hidden" />
+      </div>
+    </div>
+
+    <!-- Source pane (Task 22 renderSourcePane mounts here) -->
+    <div id="pane-source" class="flex flex-col bg-bg overflow-hidden">
+      <div class="px-3 py-2 text-xs uppercase text-accent tracking-wider border-b border-border" id="source-header">
+        Исходник
+      </div>
+      <div id="source-area" class="flex-1 overflow-auto"></div>
+    </div>
+
+    <!-- Result pane: tabs + result-area + actions -->
+    <div id="pane-result" class="flex flex-col bg-bg overflow-hidden">
+      <div id="result-tabs" class="flex gap-1 px-3 pt-2 border-b border-border text-sm"></div>
+      <div id="result-area" class="flex-1 overflow-auto p-5"></div>
+      <div class="flex gap-2 px-3 py-2 border-t border-border bg-bg-mid">
+        <button class="cta-primary" id="download-btn" data-i18n="btn.download">Скачать</button>
+        <button class="cta-primary" id="copy-btn" data-i18n="btn.copy">Копировать</button>
+        <button class="cta-primary" id="batch-zip-btn" data-i18n="btn.zip">ZIP проекта</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status bar (Task 24 renderStatusBar mounts here) -->
+  <div id="statusbar" class="flex-shrink-0"></div>
+  <div id="toast-container" class="fixed bottom-5 right-5 flex flex-col gap-2 z-40 max-w-sm"></div>
+</div>
+
+<script type="module" src="./main.ts"></script>
+</body>
+</html>
