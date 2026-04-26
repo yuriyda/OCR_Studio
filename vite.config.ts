@@ -18,7 +18,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    include: ['../../tests/frontend/**/*.test.ts'],
-    root: path.resolve(__dirname, 'app/static/src'),
+    include: ['tests/frontend/**/*.test.ts'],
+    root: __dirname,
   },
 });
