@@ -34,6 +34,11 @@ async function _json<T>(resp: Response): Promise<T> {
     } catch { /* body wasn't JSON */ }
     throw new ApiError(detail, resp.status);
   }
+  // 204 No Content (DELETE /api/documents/{id}, /api/projects/{id}) — пустое тело,
+  // resp.json() бросит SyntaxError на пустой строке.
+  if (resp.status === 204 || resp.headers.get('content-length') === '0') {
+    return undefined as T;
+  }
   return resp.json() as Promise<T>;
 }
 

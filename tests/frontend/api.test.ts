@@ -5,6 +5,7 @@ const mockFetch = (data: unknown, ok = true, status = 200) =>
   vi.fn().mockResolvedValue({
     ok,
     status,
+    headers: { get: () => null },
     json: async () => data,
     text: async () => (typeof data === 'string' ? data : JSON.stringify(data)),
   });
@@ -72,6 +73,32 @@ describe('api client', () => {
     (globalThis as any).fetch = f;
     await api.deleteDocument('a1b2c3');
     expect(f).toHaveBeenCalledWith('/api/documents/a1b2c3', expect.objectContaining({ method: 'DELETE' }));
+  });
+
+  it('deleteDocument tolerates 204 No Content (regression: SyntaxError "Unexpected end of JSON input")', async () => {
+    // Реальный backend на DELETE /api/documents/{id} возвращает 204 с пустым телом.
+    // resp.json() на пустом body бросает SyntaxError → ловится в UI как «Unexpected end of JSON input».
+    const f = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 204,
+      headers: { get: (h: string) => (h.toLowerCase() === 'content-length' ? '0' : null) },
+      json: async () => { throw new SyntaxError('Unexpected end of JSON input'); },
+      text: async () => '',
+    });
+    (globalThis as any).fetch = f;
+    await expect(api.deleteDocument('abc123')).resolves.toBeUndefined();
+  });
+
+  it('deleteProject tolerates 204 No Content (same regression)', async () => {
+    const f = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 204,
+      headers: { get: (h: string) => (h.toLowerCase() === 'content-length' ? '0' : null) },
+      json: async () => { throw new SyntaxError('Unexpected end of JSON input'); },
+      text: async () => '',
+    });
+    (globalThis as any).fetch = f;
+    await expect(api.deleteProject(7)).resolves.toBeUndefined();
   });
 
   it('uploadDocs builds FormData', async () => {
