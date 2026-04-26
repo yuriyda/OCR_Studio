@@ -134,13 +134,10 @@ async def worker():
                     str(original),
                     _progress,
                 )
-                fmt = doc["format"]
-                if fmt == "md":
-                    files.save_result(DATA_DIR, doc_id, md, "md")
-                elif fmt == "txt":
-                    files.save_result(DATA_DIR, doc_id, converters.md_to_txt(md), "txt")
-                elif fmt == "docx":
-                    files.save_result(DATA_DIR, doc_id, converters.md_to_docx(md), "docx")
+                # ВСЕГДА сохраняем result.md как canonical source.
+                # TXT и DOCX генерируются лениво при первом запросе через
+                # /api/result|markdown|rendered/{id}?format=...
+                files.save_result(DATA_DIR, doc_id, md, "md")
 
                 doc_repo.update(
                     doc_id,

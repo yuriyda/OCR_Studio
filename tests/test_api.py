@@ -638,3 +638,49 @@ def test_status_available_formats_lists_multiple(client):
     docs = client.get("/api/status").json()
     target = next(d for d in docs if d["id"] == doc_id)
     assert sorted(target["available_formats"]) == ["docx", "md"]
+
+
+def test_worker_saves_only_result_md(tmp_data_dir):
+    """После OCR в папке doc-а только result.md, нет result.txt/docx."""
+    from unittest.mock import patch
+    from app import main, db, files as files_mod
+    from app.storage import DocumentRepo
+
+    # Сбрасываем кэш модулей для чистого импорта с нужным DATA_DIR
+    for mod in list(sys.modules.keys()):
+        if mod.startswith("app"):
+            del sys.modules[mod]
+
+    from app import main, db, files as files_mod
+    from app.storage import DocumentRepo
+
+    main.DATA_DIR = tmp_data_dir
+    main.DB_PATH = tmp_data_dir / "data.db"
+
+    with patch("app.ocr_engine.process_file", return_value="# stub md content"), \
+         patch("app.ocr_engine.get_engine"):
+        with TestClient(main.app) as c:
+            upload = _upload(c).json()
+            doc_id = upload["ids"][0]
+
+            # Форсируем format=docx, чтобы убедиться что worker игнорирует его при сохранении
+            conn = db.get_connection(main.DB_PATH)
+            DocumentRepo(conn).update(doc_id, format="docx")
+            conn.commit()
+            conn.close()
+
+            c.post("/api/recognize?project_id=1")
+
+            # Worker отрабатывает асинхронно — ждём done
+            import time
+            for _ in range(30):
+                time.sleep(0.2)
+                conn = db.get_connection(main.DB_PATH)
+                status = DocumentRepo(conn).get(doc_id)["status"]
+                conn.close()
+                if status == "done":
+                    break
+
+            # На диске только result.md (даже при format=docx в DB)
+            formats = files_mod.available_formats(main.DATA_DIR, doc_id)
+            assert formats == ["md"], f"expected only ['md'], got {formats}"
