@@ -19,6 +19,7 @@ describe('shared types', () => {
       started_at: null, finished_at: null,
       page_count: null, current_page: null, progress_percent: null,
       elapsed_seconds: null, eta_seconds: null, error: null,
+      available_formats: ['md'],
     };
     expectTypeOf(d.id).toBeString();
     expectTypeOf(d.format).toEqualTypeOf<OcrFormat>();

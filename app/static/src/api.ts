@@ -79,13 +79,11 @@ export const api = {
     await _json(await fetch(`/api/documents/${docId}`, { method: 'DELETE' }));
   },
 
-  async uploadDocs(filesList: File[], format: OcrFormat, projectId: number): Promise<UploadResponse> {
-    // Backend `/api/ocr` читает format и project_id как Form-поля (multipart body),
-    // НЕ как query параметры. Кладём в FormData, иначе backend применит defaults
-    // (format='md', project_id=INBOX_ID) — это была реальная регрессия.
+  async uploadDocs(filesList: File[], projectId: number): Promise<UploadResponse> {
+    // Backend `/api/ocr` читает project_id как Form-поле; format больше не используется
+    // (worker всегда сохраняет result.md, остальные форматы lazy-генерируются).
     const fd = new FormData();
     for (const f of filesList) fd.append('files', f);
-    fd.append('format', format);
     fd.append('project_id', String(projectId));
     return _json(await fetch('/api/ocr', {
       method: 'POST', body: fd,
@@ -95,11 +93,11 @@ export const api = {
     return _json(await fetch(`/api/recognize?project_id=${projectId}`, { method: 'POST' }));
   },
 
-  async getMarkdown(docId: string): Promise<string> {
-    return _text(await fetch(`/api/markdown/${docId}`));
+  async getMarkdown(docId: string, format: 'md' | 'txt' = 'md'): Promise<string> {
+    return _text(await fetch(`/api/markdown/${docId}?format=${format}`));
   },
-  async getRendered(docId: string): Promise<string> {
-    return _text(await fetch(`/api/rendered/${docId}`));
+  async getRendered(docId: string, format: 'md' | 'docx' = 'md'): Promise<string> {
+    return _text(await fetch(`/api/rendered/${docId}?format=${format}`));
   },
   async getPreview(docId: string): Promise<PreviewData> {
     return _json(await fetch(`/api/preview/${docId}`));
@@ -112,6 +110,6 @@ export const api = {
   },
 
   sourceUrl(docId: string): string { return `/api/source/${docId}`; },
-  resultUrl(docId: string): string { return `/api/result/${docId}`; },
+  resultUrl(docId: string, format: OcrFormat): string { return `/api/result/${docId}?format=${format}`; },
   projectZipUrl(projectId: number): string { return `/api/projects/${projectId}/zip`; },
 };

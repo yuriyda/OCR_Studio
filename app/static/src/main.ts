@@ -26,7 +26,7 @@ import { toast } from './toast';
 import { getCopyText } from './clipboard';
 import { filterBySize, formatTooLargeMessage } from './validation';
 import { initSplitter } from './splitter';
-import type { Document, Project, SystemInfo, ApiLimits, OcrFormat, LangCode } from './types';
+import type { Document, Project, SystemInfo, ApiLimits, LangCode } from './types';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -169,9 +169,8 @@ const polling = new Polling(async (pid) => {
 }, 2000);
 
 async function uploadFiles(filesList: File[], pid: number): Promise<void> {
-  const fmt = $<HTMLSelectElement>('format-select').value as OcrFormat;
   try {
-    const resp = await api.uploadDocs(filesList, fmt, pid);
+    const resp = await api.uploadDocs(filesList, pid);
     for (const w of resp.warnings) {
       const file = filesList.find(_f => true);
       toast.show(t('warning.long_processing', { file: file?.name ?? '?', pages: w.pages }), 'info');
@@ -289,7 +288,9 @@ function bindUI(): void {
   });
 
   $('download-btn').addEventListener('click', () => {
-    if (selectedDocId !== null) window.open(api.resultUrl(selectedDocId), '_blank');
+    if (selectedDocId === null) return;
+    const doc = docsCache.find(d => d.id === selectedDocId);
+    if (doc) window.open(api.resultUrl(selectedDocId, doc.format), '_blank');
   });
 
   $('copy-btn').addEventListener('click', async () => {

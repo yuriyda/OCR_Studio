@@ -51,7 +51,7 @@ describe('api client', () => {
       { id: 'a1', project_id: 1, filename: 'x.pdf', size_bytes: 100, format: 'md', lang: 'ru', status: 'queued',
         created_at: 'x', started_at: null, finished_at: null,
         page_count: null, current_page: null, progress_percent: null, elapsed_seconds: null, eta_seconds: null,
-        error: null },
+        error: null, available_formats: [] },
     ]);
     const r = await api.listDocuments(1, 'created', 'desc');
     expect(r).toHaveLength(1);
@@ -101,21 +101,19 @@ describe('api client', () => {
     await expect(api.deleteProject(7)).resolves.toBeUndefined();
   });
 
-  it('uploadDocs sends format + project_id as FormData fields (regression: were in query, defaulted to md)', async () => {
+  it('uploadDocs sends project_id as FormData (format dropped — worker always saves md)', async () => {
     const f = mockFetch({ ids: ['x'], warnings: [], errors: [] });
     (globalThis as any).fetch = f;
     const file = new File(['data'], 't.pdf', { type: 'application/pdf' });
-    const r = await api.uploadDocs([file], 'docx', 5);
+    const r = await api.uploadDocs([file], 5);
     expect(r.ids).toEqual(['x']);
     const [url, init] = f.mock.calls[0] as [string, RequestInit];
-    // URL без query — все Form поля в body
     expect(url).toBe('/api/ocr');
     expect(init.method).toBe('POST');
     const body = init.body as FormData;
     expect(body instanceof FormData).toBe(true);
-    expect(body.get('format')).toBe('docx');
     expect(body.get('project_id')).toBe('5');
-    expect(body.getAll('files')).toHaveLength(1);
+    expect(body.get('format')).toBeNull();
   });
 
   it('recognizeProject POSTs query param', async () => {
@@ -126,16 +124,32 @@ describe('api client', () => {
     expect(r.started).toBe(2);
   });
 
-  it('getMarkdown returns text', async () => {
-    (globalThis as any).fetch = mockFetch('# hello');
-    const r = await api.getMarkdown('a1');
-    expect(r).toBe('# hello');
+  it('getMarkdown defaults to format=md', async () => {
+    const f = mockFetch('# md');
+    (globalThis as any).fetch = f;
+    await api.getMarkdown('a1');
+    expect(f).toHaveBeenCalledWith('/api/markdown/a1?format=md');
   });
 
-  it('getRendered returns html text', async () => {
-    (globalThis as any).fetch = mockFetch('<h1>hi</h1>');
-    const r = await api.getRendered('a1');
-    expect(r).toBe('<h1>hi</h1>');
+  it('getMarkdown can request format=txt', async () => {
+    const f = mockFetch('plain');
+    (globalThis as any).fetch = f;
+    await api.getMarkdown('a1', 'txt');
+    expect(f).toHaveBeenCalledWith('/api/markdown/a1?format=txt');
+  });
+
+  it('getRendered defaults to format=md', async () => {
+    const f = mockFetch('<h1>x</h1>');
+    (globalThis as any).fetch = f;
+    await api.getRendered('a1');
+    expect(f).toHaveBeenCalledWith('/api/rendered/a1?format=md');
+  });
+
+  it('getRendered can request format=docx', async () => {
+    const f = mockFetch('<p>doc</p>');
+    (globalThis as any).fetch = f;
+    await api.getRendered('a1', 'docx');
+    expect(f).toHaveBeenCalledWith('/api/rendered/a1?format=docx');
   });
 
   it('getPreview returns pages array', async () => {
@@ -151,9 +165,13 @@ describe('api client', () => {
     expect((await api.getLimits()).max_file_size_bytes).toBe(1000);
   });
 
+  it('resultUrl requires format param', () => {
+    expect(api.resultUrl('a1', 'docx')).toBe('/api/result/a1?format=docx');
+    expect(api.resultUrl('a1', 'md')).toBe('/api/result/a1?format=md');
+  });
+
   it('builds direct URLs', () => {
     expect(api.sourceUrl('a1')).toBe('/api/source/a1');
-    expect(api.resultUrl('a1')).toBe('/api/result/a1');
     expect(api.projectZipUrl(7)).toBe('/api/projects/7/zip');
   });
 

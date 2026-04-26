@@ -47,6 +47,7 @@ export interface Document {
   elapsed_seconds: number | null;
   eta_seconds: number | null;
   error: string | null;
+  available_formats: string[];
 }
 
 export interface SystemInfo {
