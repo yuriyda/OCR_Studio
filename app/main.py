@@ -132,7 +132,6 @@ async def worker():
                 md = await asyncio.to_thread(
                     ocr_engine.process_file,
                     str(original),
-                    doc["lang"],
                     _progress,
                 )
                 fmt = doc["format"]

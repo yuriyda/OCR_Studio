@@ -320,7 +320,7 @@ def test_page_progress_updates_during_processing(tmp_data_dir, monkeypatch):
 
     captured_pcent = []
 
-    def fake_process(path, lang, progress_callback=None):
+    def fake_process(path, progress_callback=None):
         if progress_callback:
             progress_callback(1, 4)
             conn = db.get_connection(main.DB_PATH)
@@ -592,3 +592,10 @@ def test_preview_pdf_uses_higher_dpi(client, tmp_data_dir):
     import io as _io
     img = Image.open(_io.BytesIO(img_bytes))
     assert img.width >= 1500, f"expected width >=1500 (200 DPI), got {img.width}"
+
+
+def test_system_engine_lang_is_fixed_ru(client):
+    """engine_lang всегда 'ru' независимо от состояния _engine (Task 2 fix)."""
+    r = client.get("/api/system")
+    assert r.status_code == 200
+    assert r.json()["engine_lang"] == "ru"
