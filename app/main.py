@@ -353,6 +353,26 @@ async def download_result(doc_id: str):
         conn.close()
 
 
+@app.get("/api/source/{doc_id}")
+async def get_source(doc_id: str):
+    """Вернуть оригинальный файл (PDF/image) для рендера в Source pane.
+
+    Используется frontend Source pane (Task 22) для крупного отображения
+    исходника текущего документа.
+    """
+    conn = _conn()
+    try:
+        doc = DocumentRepo(conn).get(doc_id)
+        if not doc:
+            raise HTTPException(404, "Document not found")
+        src_path = files.original_path(DATA_DIR, doc_id)
+        if not src_path or not src_path.exists():
+            raise HTTPException(404, "Source file missing on disk")
+        return FileResponse(str(src_path), filename=doc["filename"])
+    finally:
+        conn.close()
+
+
 @app.get("/api/markdown/{doc_id}")
 async def get_markdown(doc_id: str):
     conn = _conn()

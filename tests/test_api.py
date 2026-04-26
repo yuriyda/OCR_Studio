@@ -545,3 +545,18 @@ def test_upload_image_no_warning(client):
     r = client.post("/api/ocr", files=files, data=data_form)
     data = r.json()
     assert data["warnings"] == []
+
+
+def test_source_endpoint_returns_original_image(client):
+    files = [("files", ("orig.png", io.BytesIO(b"fake-image-bytes"), "image/png"))]
+    data_form = {"format": "md", "lang": "ru"}
+    r = client.post("/api/ocr", files=files, data=data_form)
+    doc_id = r.json()["ids"][0]
+    r2 = client.get(f"/api/source/{doc_id}")
+    assert r2.status_code == 200
+    assert r2.content == b"fake-image-bytes"
+
+
+def test_source_endpoint_404_for_missing_doc(client):
+    r = client.get("/api/source/nonexistent99")
+    assert r.status_code == 404
