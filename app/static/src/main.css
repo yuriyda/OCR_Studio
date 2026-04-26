@@ -1,0 +1,79 @@
+/*
+ * Tailwind дизайн-система: токены и компонентные классы для OCR Studio (Glass+Neon dark).
+ *
+ * Редактирование:
+ * - Изменение токенов цвета/тени/градиента — только через `tailwind.config.ts` (extend.colors / boxShadow / backgroundImage),
+ *   НЕ хардкодить hex здесь.
+ * - Компонентные классы (.glass-panel, .cta-primary, .pill, .doc-item, .modal-*, .toast-*, .badge*, .progress-fill)
+ *   — переиспользуются в TS-модулях; переименование требует синхронной правки в .ts/.html.
+ * - Анимации (fade-in, toast-in) — only здесь; в TS не дублировать.
+ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-app-bg text-text font-sans antialiased min-h-screen;
+    font-family: -apple-system, system-ui, 'Segoe UI', sans-serif;
+  }
+  * { box-sizing: border-box; }
+}
+
+@layer components {
+  .glass-panel {
+    @apply bg-surface backdrop-blur-glass border border-border;
+  }
+  .cta-primary {
+    @apply bg-accent-gradient text-white font-semibold px-4 py-2 rounded-md shadow-neon;
+    @apply transition-all duration-150 hover:shadow-neon-strong;
+  }
+  .cta-primary:disabled {
+    @apply bg-surface text-text-faint shadow-none cursor-not-allowed;
+    background-image: none;
+  }
+  .cta-primary.processing {
+    background-image: none;
+    @apply bg-accent/20 text-accent shadow-none;
+  }
+  .pill {
+    @apply bg-surface border border-border text-text px-2 py-1 rounded text-xs;
+  }
+  .doc-item {
+    @apply flex items-center gap-2 px-3 py-2 rounded-md cursor-pointer text-sm;
+    @apply hover:bg-surface-hover transition-colors;
+  }
+  .doc-item.active {
+    background: linear-gradient(90deg, rgba(124,131,253,0.18), transparent);
+    @apply border-l-2 border-accent;
+  }
+  .modal-overlay {
+    @apply fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50;
+    animation: fade-in 0.15s;
+  }
+  .modal-content {
+    @apply glass-panel rounded-lg p-6 min-w-[360px] max-w-[480px] shadow-glass;
+  }
+  .toast-base {
+    @apply flex items-center gap-2 bg-surface border border-border border-l-4 rounded-md px-3 py-2 text-sm;
+    @apply shadow-glass cursor-pointer;
+    animation: toast-in 0.2s ease-out;
+  }
+  .toast-success { @apply border-l-success; }
+  .toast-error { @apply border-l-error; }
+  .toast-info { @apply border-l-text-muted; }
+  .badge { @apply text-xs px-2 py-0.5 rounded uppercase tracking-wider; }
+  .badge-queued { @apply bg-surface text-text-muted border border-border; }
+  .badge-done { background: rgba(78,204,163,0.15); @apply text-success border border-success/30; }
+  .badge-error { background: rgba(255,122,146,0.15); @apply text-error border border-error/30; }
+  .progress-fill { @apply bg-accent-gradient h-full shadow-neon; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes toast-in {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
