@@ -612,3 +612,29 @@ def test_rendered_endpoint_returns_html_text(client):
     ctype = r.headers.get("content-type", "").lower()
     assert "text/html" in ctype, f"expected text/html, got {ctype}"
     assert "<h1>Heading</h1>" in r.text
+
+
+def test_status_includes_available_formats(client):
+    """Каждый doc в /api/status имеет поле available_formats: list[str]."""
+    upload = _upload(client).json()
+    doc_id = upload["ids"][0]
+    _force_done(doc_id, "# md content", "md")
+
+    docs = client.get("/api/status").json()
+    target = next(d for d in docs if d["id"] == doc_id)
+    assert "available_formats" in target
+    assert target["available_formats"] == ["md"]
+
+
+def test_status_available_formats_lists_multiple(client):
+    """Если в папке есть и md и docx — оба в списке."""
+    from app import files as files_mod
+    import app.main as m
+    upload = _upload(client).json()
+    doc_id = upload["ids"][0]
+    _force_done(doc_id, "# md", "md")
+    files_mod.save_result(m.DATA_DIR, doc_id, b"PK fake docx", "docx")
+
+    docs = client.get("/api/status").json()
+    target = next(d for d in docs if d["id"] == doc_id)
+    assert sorted(target["available_formats"]) == ["docx", "md"]

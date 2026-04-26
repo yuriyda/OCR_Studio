@@ -332,6 +332,7 @@ def _doc_response(d: dict) -> dict:
         "size_bytes": d["size_bytes"],
         "elapsed_seconds": elapsed,
         "eta_seconds": eta,
+        "available_formats": files.available_formats(DATA_DIR, d["id"]),
     }
 
 
