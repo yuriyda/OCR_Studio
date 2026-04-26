@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import Body, FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import db, files, ocr_engine, converters
@@ -379,6 +379,11 @@ async def get_source(doc_id: str):
 
 @app.get("/api/markdown/{doc_id}")
 async def get_markdown(doc_id: str):
+    """Возвращает raw markdown/текст результата как text/plain.
+
+    Фронтенд (api.ts::getMarkdown) читает ответ через `_text(resp)` и
+    вставляет содержимое в <pre>. Возврат JSON ломал бы рендеринг.
+    """
     conn = _conn()
     try:
         doc = DocumentRepo(conn).get(doc_id)
@@ -389,7 +394,8 @@ async def get_markdown(doc_id: str):
         path = files.result_path(DATA_DIR, doc_id)
         if not path or not path.exists():
             raise HTTPException(404, "Result file missing")
-        return {"markdown": path.read_text(encoding="utf-8") if path.suffix in (".md", ".txt") else ""}
+        text = path.read_text(encoding="utf-8") if path.suffix in (".md", ".txt") else ""
+        return PlainTextResponse(text, media_type="text/plain; charset=utf-8")
     finally:
         conn.close()
 
@@ -547,12 +553,16 @@ async def get_rendered(doc_id: str):
             raise HTTPException(404, "Result file missing")
         fmt = doc["format"]
         if fmt == "md":
-            return {"html": _preview.markdown_to_html(path.read_text(encoding="utf-8"))}
-        if fmt == "txt":
-            return {"html": _preview.text_to_html(path.read_text(encoding="utf-8"))}
-        if fmt == "docx":
-            return {"html": _preview.docx_to_html(path.read_bytes())}
-        raise HTTPException(400, f"Unsupported format: {fmt}")
+            html = _preview.markdown_to_html(path.read_text(encoding="utf-8"))
+        elif fmt == "txt":
+            html = _preview.text_to_html(path.read_text(encoding="utf-8"))
+        elif fmt == "docx":
+            html = _preview.docx_to_html(path.read_bytes())
+        else:
+            raise HTTPException(400, f"Unsupported format: {fmt}")
+        # Фронтенд читает ответ через `_text(resp)` и вставляет в innerHTML.
+        # Возврат JSON ломал бы рендеринг — отдаём raw text/html.
+        return HTMLResponse(html, media_type="text/html; charset=utf-8")
     finally:
         conn.close()
 

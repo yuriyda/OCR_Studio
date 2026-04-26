@@ -216,7 +216,7 @@ def test_rendered_md_returns_html(client):
     _force_done(upload["ids"][0], "# Heading\n\n| a | b |\n| --- | --- |\n| 1 | 2 |", "md")
     r = client.get(f"/api/rendered/{upload['ids'][0]}")
     assert r.status_code == 200
-    html = r.json()["html"]
+    html = r.text
     assert "<h1>Heading</h1>" in html
     assert "<table>" in html
 
@@ -231,7 +231,7 @@ def test_rendered_docx_returns_html(client):
     _force_done(upload["ids"][0], fmt="docx")
     r = client.get(f"/api/rendered/{upload['ids'][0]}")
     assert r.status_code == 200
-    assert "<" in r.json()["html"]
+    assert "<" in r.text
 
 
 def test_rendered_txt_wraps_pre(client):
@@ -243,7 +243,7 @@ def test_rendered_txt_wraps_pre(client):
     conn.close()
     _force_done(upload["ids"][0], "plain\ntext", "txt")
     r = client.get(f"/api/rendered/{upload['ids'][0]}")
-    assert "<pre>" in r.json()["html"]
+    assert "<pre>" in r.text
 
 
 def test_recovery_on_restart(tmp_data_dir):
@@ -580,3 +580,35 @@ def test_system_engine_lang_is_fixed_ru(client):
     r = client.get("/api/system")
     assert r.status_code == 200
     assert r.json()["engine_lang"] == "ru"
+
+
+def test_markdown_endpoint_returns_raw_text_plain(client):
+    """Regression Task 9: /api/markdown/{id} отдаёт raw markdown как text/plain.
+
+    Раньше endpoint возвращал JSON {"markdown": "..."}, и фронтенд через
+    `_text(resp)` показывал в <pre> буквальную строку JSON вместо markdown.
+    """
+    upload = _upload(client).json()
+    doc_id = upload["ids"][0]
+    body = "# Heading\n\nbody **bold** text"
+    _force_done(doc_id, body, "md")
+
+    r = client.get(f"/api/markdown/{doc_id}")
+    assert r.status_code == 200
+    ctype = r.headers.get("content-type", "").lower()
+    assert "text/plain" in ctype, f"expected text/plain, got {ctype}"
+    assert r.text == body
+
+
+def test_rendered_endpoint_returns_html_text(client):
+    """Regression Task 9: /api/rendered/{id} отдаёт raw HTML как text/html,
+    чтобы фронтенд через `_text(resp)` мог сразу вставить в innerHTML."""
+    upload = _upload(client).json()
+    doc_id = upload["ids"][0]
+    _force_done(doc_id, "# Heading\n\nbody", "md")
+
+    r = client.get(f"/api/rendered/{doc_id}")
+    assert r.status_code == 200
+    ctype = r.headers.get("content-type", "").lower()
+    assert "text/html" in ctype, f"expected text/html, got {ctype}"
+    assert "<h1>Heading</h1>" in r.text
