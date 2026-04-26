@@ -58,3 +58,31 @@ def test_filename_safe_against_traversal(tmp_data_dir):
     path = files.save_original(tmp_data_dir, "abc", b"x", "../../../etc/passwd")
     assert "../" not in str(path)
     assert path.parent == tmp_data_dir / "docs" / "abc"
+
+
+def test_result_path_for_format_returns_existing(tmp_data_dir):
+    from app import files
+    files.save_result(tmp_data_dir, "abc12345", "# md", "md")
+    p = files.result_path_for_format(tmp_data_dir, "abc12345", "md")
+    assert p is not None
+    assert p.name == "result.md"
+
+
+def test_result_path_for_format_returns_none_when_missing(tmp_data_dir):
+    from app import files
+    files.save_result(tmp_data_dir, "abc12345", "# md", "md")
+    p = files.result_path_for_format(tmp_data_dir, "abc12345", "docx")
+    assert p is None
+
+
+def test_available_formats_lists_only_existing(tmp_data_dir):
+    from app import files
+    files.save_result(tmp_data_dir, "doc99", "# md", "md")
+    files.save_result(tmp_data_dir, "doc99", b"PK fake", "docx")
+    result = files.available_formats(tmp_data_dir, "doc99")
+    assert sorted(result) == ["docx", "md"]
+
+
+def test_available_formats_empty_for_missing_doc(tmp_data_dir):
+    from app import files
+    assert files.available_formats(tmp_data_dir, "nonexistent") == []
