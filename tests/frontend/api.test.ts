@@ -78,10 +78,10 @@ describe('api client', () => {
     const f = mockFetch({ ids: ['x'], warnings: [], errors: [] });
     (globalThis as any).fetch = f;
     const file = new File(['data'], 't.pdf', { type: 'application/pdf' });
-    const r = await api.uploadDocs([file], 'md', 'ru', 1);
+    const r = await api.uploadDocs([file], 'md', 1);
     expect(r.ids).toEqual(['x']);
     const [url, init] = f.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('/api/ocr?project_id=1&format=md&lang=ru');
+    expect(url).toBe('/api/ocr?project_id=1&format=md');
     expect(init.method).toBe('POST');
     expect(init.body instanceof FormData).toBe(true);
   });
@@ -92,12 +92,6 @@ describe('api client', () => {
     const r = await api.recognizeProject(5);
     expect(f).toHaveBeenCalledWith('/api/recognize?project_id=5', expect.objectContaining({ method: 'POST' }));
     expect(r.started).toBe(2);
-  });
-
-  it('preloadEngine returns status', async () => {
-    (globalThis as any).fetch = mockFetch({ status: 'loading' });
-    const r = await api.preloadEngine('en');
-    expect(r.status).toBe('loading');
   });
 
   it('getMarkdown returns text', async () => {

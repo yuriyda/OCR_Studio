@@ -15,7 +15,7 @@
 
 import type {
   Project, Document, SystemInfo, ApiLimits, UploadResponse,
-  RecognizeResponse, PreloadResponse, PreviewData, OcrFormat, LangCode,
+  RecognizeResponse, PreviewData, OcrFormat,
 } from './types';
 
 export class ApiError extends Error {
@@ -74,18 +74,15 @@ export const api = {
     await _json(await fetch(`/api/documents/${docId}`, { method: 'DELETE' }));
   },
 
-  async uploadDocs(filesList: File[], format: OcrFormat, lang: LangCode, projectId: number): Promise<UploadResponse> {
+  async uploadDocs(filesList: File[], format: OcrFormat, projectId: number): Promise<UploadResponse> {
     const fd = new FormData();
     for (const f of filesList) fd.append('files', f);
-    return _json(await fetch(`/api/ocr?project_id=${projectId}&format=${format}&lang=${lang}`, {
+    return _json(await fetch(`/api/ocr?project_id=${projectId}&format=${format}`, {
       method: 'POST', body: fd,
     }));
   },
   async recognizeProject(projectId: number): Promise<RecognizeResponse> {
     return _json(await fetch(`/api/recognize?project_id=${projectId}`, { method: 'POST' }));
-  },
-  async preloadEngine(lang: LangCode): Promise<PreloadResponse> {
-    return _json(await fetch(`/api/engine/preload?lang=${lang}`, { method: 'POST' }));
   },
 
   async getMarkdown(docId: string): Promise<string> {
