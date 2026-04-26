@@ -191,6 +191,11 @@ async def upload_files(
     lang: str = Form("ru"),
     project_id: int = Form(INBOX_ID),
 ):
+    """Сохранить файлы как queued документы. НЕ запускает OCR — для этого POST /api/recognize.
+
+    Response shape: {ids: [<created doc ids>], warnings: [], errors: [{filename, error}]}.
+    `warnings` заполняется в Task 10 (page-warning для PDF >50 страниц).
+    """
     if format not in ("md", "txt", "docx"):
         raise HTTPException(400, "Invalid format. Use md, txt, or docx.")
     if lang not in ("ru", "en"):
@@ -202,19 +207,20 @@ async def upload_files(
         if pr.get(project_id) is None:
             raise HTTPException(400, f"Project {project_id} not found")
         doc_repo = DocumentRepo(conn)
-        created = []
+        ids: list[str] = []
+        errors: list[dict] = []
         for f in files_in:
             ext = Path(f.filename or "file").suffix.lower()
             if ext not in ALLOWED_EXTENSIONS:
-                created.append({"filename": f.filename, "error": f"Unsupported: {ext}"})
+                errors.append({"filename": f.filename, "error": f"Unsupported: {ext}"})
                 continue
             content = await f.read()
             if len(content) > MAX_FILE_SIZE:
-                created.append({"filename": f.filename, "error": "File too large (max 50 MB)"})
+                errors.append({"filename": f.filename, "error": "File too large (max 50 MB)"})
                 continue
             doc_id = uuid.uuid4().hex[:12]
             files.save_original(DATA_DIR, doc_id, content, f.filename or "file")
-            doc = doc_repo.create(
+            doc_repo.create(
                 doc_id=doc_id,
                 project_id=project_id,
                 filename=Path(f.filename or "file").name,
@@ -222,14 +228,32 @@ async def upload_files(
                 lang=lang,
                 size_bytes=len(content),
             )
-            await task_queue.put(doc_id)
-            created.append({
-                "id": doc_id,
-                "filename": doc["filename"],
-                "project_id": project_id,
-                "status": "queued",
-            })
-        return JSONResponse(created)
+            # NB: НЕ кладём в task_queue — старт только через POST /api/recognize.
+            ids.append(doc_id)
+        return {"ids": ids, "warnings": [], "errors": errors}
+    finally:
+        conn.close()
+
+
+@app.post("/api/recognize")
+async def recognize_project(project_id: int):
+    """Запустить OCR для всех queued документов проекта.
+
+    Кладёт каждого queued doc_id в task_queue, worker подхватит асинхронно.
+    Возвращает {started: <count>, doc_ids: [<list>]}.
+    """
+    conn = _conn()
+    try:
+        pr = ProjectRepo(conn)
+        if pr.get(project_id) is None:
+            raise HTTPException(404, f"Project {project_id} not found")
+        doc_repo = DocumentRepo(conn)
+        queued = doc_repo.queued_in_project(project_id)
+        started_ids: list[str] = []
+        for doc in queued:
+            await task_queue.put(doc["id"])
+            started_ids.append(doc["id"])
+        return {"started": len(started_ids), "doc_ids": started_ids}
     finally:
         conn.close()
 

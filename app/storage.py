@@ -192,3 +192,12 @@ class DocumentRepo:
             "SELECT id FROM documents WHERE status = 'queued' ORDER BY created_at ASC"
         ).fetchall()
         return [r["id"] for r in rows]
+
+    def queued_in_project(self, project_id: int) -> list[dict]:
+        """Список queued документов в конкретном проекте, в порядке создания."""
+        cur = self.conn.execute(
+            "SELECT * FROM documents WHERE project_id = ? AND status = 'queued' "
+            "ORDER BY created_at ASC",
+            (project_id,),
+        )
+        return [dict(r) for r in cur.fetchall()]

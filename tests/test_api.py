@@ -51,8 +51,9 @@ def test_upload_to_inbox_default(client):
     r = _upload(client)
     assert r.status_code == 200
     body = r.json()
-    assert len(body) == 1
-    assert body[0]["project_id"] == 1
+    assert len(body["ids"]) == 1
+    docs = client.get("/api/status").json()
+    assert any(d["id"] == body["ids"][0] and d["project_id"] == 1 for d in docs)
 
 
 def test_status_returns_extended_fields(client):
@@ -124,7 +125,10 @@ def test_upload_to_specific_project(client):
     p = client.post("/api/projects", json={"name": "Target"}).json()
     r = _upload(client, project_id=p["id"])
     assert r.status_code == 200
-    assert r.json()[0]["project_id"] == p["id"]
+    doc_id = r.json()["ids"][0]
+    docs = client.get("/api/status").json()
+    target = next(d for d in docs if d["id"] == doc_id)
+    assert target["project_id"] == p["id"]
 
 
 def test_status_filter_by_project(client):
@@ -140,7 +144,7 @@ def test_status_filter_by_project(client):
 def test_move_document(client):
     p = client.post("/api/projects", json={"name": "Target"}).json()
     upload = _upload(client).json()
-    doc_id = upload[0]["id"]
+    doc_id = upload["ids"][0]
     r = client.patch(f"/api/documents/{doc_id}", json={"project_id": p["id"]})
     assert r.status_code == 200
     assert r.json()["project_id"] == p["id"]
@@ -148,13 +152,13 @@ def test_move_document(client):
 
 def test_move_to_missing_project_400(client):
     upload = _upload(client).json()
-    r = client.patch(f"/api/documents/{upload[0]['id']}", json={"project_id": 99999})
+    r = client.patch(f"/api/documents/{upload['ids'][0]}", json={"project_id": 99999})
     assert r.status_code == 400
 
 
 def test_delete_document(client):
     upload = _upload(client).json()
-    r = client.delete(f"/api/documents/{upload[0]['id']}")
+    r = client.delete(f"/api/documents/{upload['ids'][0]}")
     assert r.status_code == 204
 
 
@@ -163,9 +167,9 @@ def test_delete_processing_document_409(client):
     from app import db, main
     from app.storage import DocumentRepo
     conn = db.get_connection(main.DB_PATH)
-    DocumentRepo(conn).update(upload[0]["id"], status="processing")
+    DocumentRepo(conn).update(upload["ids"][0], status="processing")
     conn.close()
-    r = client.delete(f"/api/documents/{upload[0]['id']}")
+    r = client.delete(f"/api/documents/{upload['ids'][0]}")
     assert r.status_code == 409
 
 
@@ -209,8 +213,8 @@ def _force_done(doc_id, content="# stub", fmt="md"):
 
 def test_rendered_md_returns_html(client):
     upload = _upload(client).json()
-    _force_done(upload[0]["id"], "# Heading\n\n| a | b |\n| --- | --- |\n| 1 | 2 |", "md")
-    r = client.get(f"/api/rendered/{upload[0]['id']}")
+    _force_done(upload["ids"][0], "# Heading\n\n| a | b |\n| --- | --- |\n| 1 | 2 |", "md")
+    r = client.get(f"/api/rendered/{upload['ids'][0]}")
     assert r.status_code == 200
     html = r.json()["html"]
     assert "<h1>Heading</h1>" in html
@@ -222,10 +226,10 @@ def test_rendered_docx_returns_html(client):
     from app import db, main
     from app.storage import DocumentRepo
     conn = db.get_connection(main.DB_PATH)
-    DocumentRepo(conn).update(upload[0]["id"], format="docx")
+    DocumentRepo(conn).update(upload["ids"][0], format="docx")
     conn.close()
-    _force_done(upload[0]["id"], fmt="docx")
-    r = client.get(f"/api/rendered/{upload[0]['id']}")
+    _force_done(upload["ids"][0], fmt="docx")
+    r = client.get(f"/api/rendered/{upload['ids'][0]}")
     assert r.status_code == 200
     assert "<" in r.json()["html"]
 
@@ -235,10 +239,10 @@ def test_rendered_txt_wraps_pre(client):
     from app import db, main
     from app.storage import DocumentRepo
     conn = db.get_connection(main.DB_PATH)
-    DocumentRepo(conn).update(upload[0]["id"], format="txt")
+    DocumentRepo(conn).update(upload["ids"][0], format="txt")
     conn.close()
-    _force_done(upload[0]["id"], "plain\ntext", "txt")
-    r = client.get(f"/api/rendered/{upload[0]['id']}")
+    _force_done(upload["ids"][0], "plain\ntext", "txt")
+    r = client.get(f"/api/rendered/{upload['ids'][0]}")
     assert "<pre>" in r.json()["html"]
 
 
@@ -259,7 +263,7 @@ def test_recovery_on_restart(tmp_data_dir):
         with patch("app.main.worker", _noop_worker):
             with TestClient(main.app) as c:
                 upload = _upload(c).json()
-                doc_id = upload[0]["id"]
+                doc_id = upload["ids"][0]
                 from app import db
                 from app.storage import DocumentRepo
                 conn = db.get_connection(main.DB_PATH)
@@ -286,7 +290,7 @@ def test_orphan_files_cleaned(client, tmp_data_dir):
 def test_ghost_record_marked_error(client, tmp_data_dir):
     """Запись в БД без файлов на диске → status=error."""
     upload = _upload(client).json()
-    doc_id = upload[0]["id"]
+    doc_id = upload["ids"][0]
     import shutil
     shutil.rmtree(tmp_data_dir / "docs" / doc_id, ignore_errors=True)
     from app import main
@@ -330,7 +334,9 @@ def test_page_progress_updates_during_processing(tmp_data_dir, monkeypatch):
          patch("app.ocr_engine.get_engine"):
         with TestClient(main.app) as c:
             r = _upload(c)
-            doc_id = r.json()[0]["id"]
+            doc_id = r.json()["ids"][0]
+            # Auto-start больше нет: явно запускаем OCR через /api/recognize.
+            c.post("/api/recognize?project_id=1")
             import time
             for _ in range(50):
                 time.sleep(0.1)
@@ -353,7 +359,7 @@ def test_project_zip_returns_zip_with_results(client):
     """ZIP содержит только результаты завершённых документов."""
     p = client.post("/api/projects", json={"name": "ZipP"}).json()
     upload = _upload(client, project_id=p["id"]).json()
-    _force_done(upload[0]["id"], "# zipped result", "md")
+    _force_done(upload["ids"][0], "# zipped result", "md")
     r = client.get(f"/api/projects/{p['id']}/zip")
     assert r.status_code == 200
     assert r.headers["content-type"] == "application/zip"
@@ -368,9 +374,9 @@ def test_project_zip_returns_zip_with_results(client):
 def test_project_zip_skips_processing_documents(client):
     """ZIP не включает документы со статусом != done."""
     p = client.post("/api/projects", json={"name": "MixedZip"}).json()
-    done_doc = _upload(client, name="a.pdf", project_id=p["id"]).json()[0]
-    queued_doc = _upload(client, name="b.pdf", project_id=p["id"]).json()[0]
-    _force_done(done_doc["id"], "# only this", "md")
+    done_id = _upload(client, name="a.pdf", project_id=p["id"]).json()["ids"][0]
+    queued_id = _upload(client, name="b.pdf", project_id=p["id"]).json()["ids"][0]
+    _force_done(done_id, "# only this", "md")
 
     r = client.get(f"/api/projects/{p['id']}/zip")
     assert r.status_code == 200
@@ -389,10 +395,10 @@ def test_project_zip_404_on_missing_project(client):
 def test_project_zip_disambiguates_duplicate_filenames(client):
     """Два done-документа с одинаковым stem → второй получает суффикс _1."""
     p = client.post("/api/projects", json={"name": "Dups"}).json()
-    a = _upload(client, name="report.pdf", project_id=p["id"]).json()[0]
-    b = _upload(client, name="report.pdf", project_id=p["id"]).json()[0]
-    _force_done(a["id"], "# first", "md")
-    _force_done(b["id"], "# second", "md")
+    a_id = _upload(client, name="report.pdf", project_id=p["id"]).json()["ids"][0]
+    b_id = _upload(client, name="report.pdf", project_id=p["id"]).json()["ids"][0]
+    _force_done(a_id, "# first", "md")
+    _force_done(b_id, "# second", "md")
     r = client.get(f"/api/projects/{p['id']}/zip")
     assert r.status_code == 200
     import io, zipfile
@@ -403,7 +409,7 @@ def test_project_zip_disambiguates_duplicate_filenames(client):
 
 def test_status_includes_elapsed_and_eta(client):
     upload = _upload(client).json()
-    doc_id = upload[0]["id"]
+    doc_id = upload["ids"][0]
     from app import db, main
     from app.storage import DocumentRepo
     conn = db.get_connection(main.DB_PATH)
@@ -425,7 +431,7 @@ def test_status_includes_elapsed_and_eta(client):
 def test_status_elapsed_none_when_not_started(client):
     upload = _upload(client).json()
     docs = client.get("/api/status").json()
-    target = next(d for d in docs if d["id"] == upload[0]["id"])
+    target = next(d for d in docs if d["id"] == upload["ids"][0])
     assert target["elapsed_seconds"] is None
     assert target["eta_seconds"] is None
 
@@ -461,3 +467,50 @@ def test_engine_preload_returns_ready_when_already_loaded(client, monkeypatch):
     r = client.post("/api/engine/preload?lang=ru")
     assert r.status_code == 200
     assert r.json()["status"] == "ready"
+
+
+def test_ocr_upload_returns_ids_warnings_shape(client):
+    """Новый shape /api/ocr: {ids, warnings, errors}."""
+    r = _upload(client)
+    assert r.status_code == 200
+    data = r.json()
+    assert "ids" in data
+    assert "warnings" in data
+    assert "errors" in data
+    assert isinstance(data["ids"], list)
+    assert len(data["ids"]) == 1
+
+
+def test_ocr_upload_does_not_start_processing(client):
+    """Upload оставляет документ в queued — НЕ запускает worker."""
+    r = _upload(client)
+    doc_id = r.json()["ids"][0]
+    status = client.get("/api/status").json()
+    target = next(d for d in status if d["id"] == doc_id)
+    assert target["status"] == "queued"
+
+
+def test_recognize_endpoint_starts_queued_docs(client):
+    """POST /api/recognize?project_id=N кладёт queued докi в очередь."""
+    upload1 = _upload(client, name="a.pdf").json()
+    upload2 = _upload(client, name="b.pdf").json()
+    ids = upload1["ids"] + upload2["ids"]
+
+    r = client.post("/api/recognize?project_id=1")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["started"] == 2
+    assert set(data["doc_ids"]) == set(ids)
+
+
+def test_recognize_endpoint_404_for_missing_project(client):
+    r = client.post("/api/recognize?project_id=99999")
+    assert r.status_code == 404
+
+
+def test_recognize_endpoint_zero_when_no_queued(client):
+    p = client.post("/api/projects", json={"name": "Empty"}).json()
+    r = client.post(f"/api/recognize?project_id={p['id']}")
+    assert r.status_code == 200
+    assert r.json()["started"] == 0
+    assert r.json()["doc_ids"] == []
