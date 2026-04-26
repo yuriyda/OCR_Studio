@@ -591,18 +591,20 @@ async def preview_pages(doc_id: str):
         if not original or not original.exists():
             raise HTTPException(404, "Original missing")
         pages = []
+        # DPI/size повышен для Source pane (Task 12+22): браузер downscale через CSS,
+        # для thumbnail-баров — норм; для крупного просмотра — нужно sharp.
         if original.suffix.lower() == ".pdf":
             import fitz
             d = fitz.open(str(original))
             for page in d:
-                pix = page.get_pixmap(dpi=120)
+                pix = page.get_pixmap(dpi=200)
                 pages.append(base64.b64encode(pix.tobytes("jpeg", 80)).decode())
             d.close()
         else:
             from PIL import Image
             import io as _io
             img = Image.open(original)
-            img.thumbnail((800, 800))
+            img.thumbnail((1600, 1600))
             buf = _io.BytesIO()
             img.save(buf, format="JPEG", quality=80)
             pages.append(base64.b64encode(buf.getvalue()).decode())

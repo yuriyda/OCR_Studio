@@ -560,3 +560,35 @@ def test_source_endpoint_returns_original_image(client):
 def test_source_endpoint_404_for_missing_doc(client):
     r = client.get("/api/source/nonexistent99")
     assert r.status_code == 404
+
+
+def test_preview_pdf_uses_higher_dpi(client, tmp_data_dir):
+    """Preview PDF страниц должен идти в 200 DPI (sharper для Source pane)."""
+    import fitz
+    import base64
+
+    # Создаём минимальный PDF (US Letter ~ 612x792 pt)
+    pdf_doc = fitz.open()
+    page = pdf_doc.new_page(width=612, height=792)
+    page.insert_text((72, 100), "Test")
+    pdf_path = tmp_data_dir / "test.pdf"
+    pdf_doc.save(str(pdf_path))
+    pdf_doc.close()
+
+    with open(pdf_path, "rb") as f:
+        files_arg = [("files", ("test.pdf", io.BytesIO(f.read()), "application/pdf"))]
+    r = client.post("/api/ocr", files=files_arg, data={"format": "md", "lang": "ru"})
+    doc_id = r.json()["ids"][0]
+
+    r2 = client.get(f"/api/preview/{doc_id}")
+    assert r2.status_code == 200
+    pages = r2.json()["pages"]
+    assert len(pages) == 1
+
+    # При 200 DPI letter page (8.5") даёт ширину ~1700 px (8.5 * 200 = 1700).
+    # При 120 DPI было ~1020 px. Проверяем что bump применён.
+    img_bytes = base64.b64decode(pages[0])
+    from PIL import Image
+    import io as _io
+    img = Image.open(_io.BytesIO(img_bytes))
+    assert img.width >= 1500, f"expected width >=1500 (200 DPI), got {img.width}"
