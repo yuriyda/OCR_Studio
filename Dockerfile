@@ -1,3 +1,19 @@
+# ──────────── Stage 1: Frontend build ────────────
+FROM node:20-alpine AS frontend-build
+
+WORKDIR /build
+
+COPY package.json package-lock.json ./
+COPY tsconfig.json tsconfig.node.json ./
+COPY vite.config.ts tailwind.config.ts postcss.config.js ./
+
+RUN npm ci
+
+COPY app/static/src ./app/static/src
+
+RUN npm run build
+
+# ──────────── Stage 2: Runtime (CUDA + Python + built frontend) ────────────
 FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -16,6 +32,11 @@ RUN pip3 install --no-cache-dir paddlepaddle-gpu==3.0.0 \
     && pip3 install --no-cache-dir 'paddlex[ocr]==3.5.1'
 
 COPY app/ app/
+
+# Copy built frontend from stage 1 (overrides any app/static/dist baked into git ignore).
+COPY --from=frontend-build /build/app/static/dist app/static/dist
+
+ENV OCR_DATA_DIR=/app/data
 
 EXPOSE 8000
 
