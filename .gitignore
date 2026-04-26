@@ -5,3 +5,10 @@ __pycache__/
 .pytest_cache/
 *.db
 .DS_Store
+
+# Frontend build artifacts
+app/static/dist/
+*.tsbuildinfo
+
+# Visual companion brainstorm dirs
+.superpowers/

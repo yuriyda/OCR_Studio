@@ -1,13 +1,29 @@
 {
   "name": "ocr-service-frontend",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run",
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit",
+    "test": "tsc --noEmit && vitest run",
     "test:watch": "vitest"
   },
   "devDependencies": {
-    "vitest": "^2.0.0",
-    "jsdom": "^25.0.0"
+    "@types/node": "^20.11.0",
+    "@types/split.js": "^1.4.5",
+    "@vitejs/plugin-legacy": "^5.3.0",
+    "autoprefixer": "^10.4.16",
+    "jsdom": "^23.0.1",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.10",
+    "vitest": "^1.1.0"
+  },
+  "dependencies": {
+    "split.js": "^1.6.5"
   }
 }
