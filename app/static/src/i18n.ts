@@ -7,10 +7,14 @@
  * - При добавлении новой строки UI: ключ + значение должны появиться в ОБОИХ
  *   bundles одновременно (`ru.json` и `en.json`). Не добавлять только в один —
  *   `t()` отдаст ключ как fallback, что выглядит как баг.
- * - При смене языка вызывается `loadLang(lang)`, диспатчится CustomEvent
- *   'i18n:changed' на document. Подписчики (header, sidebar, tabs) перерендериваются.
- * - `applyI18nToDom(root)` — utility для одноразового замещения статичных
- *   `[data-i18n]` атрибутов на стороне HTML (используется в main.ts/boot()).
+ * - При смене языка вызывается `loadLang(lang)`. Происходит автоматически:
+ *   (1) `applyI18nToDom(document)` обновляет статичные `[data-i18n]` / `[data-i18n-placeholder]`
+ *   атрибуты, (2) диспатчится typed CustomEvent 'i18n:changed' с `detail.lang` —
+ *   динамические компоненты (statusbar, project list) подписываются и перерендериваются сами.
+ * - `applyI18nToDom(root)` — utility, можно вызвать вручную для отдельного поддерева
+ *   (например, после рендера динамического HTML с `data-i18n` маркерами).
+ * - Размещай `data-i18n` ТОЛЬКО на leaf-элементах (содержащих только текст). Иначе
+ *   `textContent` затрёт дочерние ноды (например, иконку <svg>).
  * - Не добавлять loader для произвольных языков — это не ICU, локалей всего две.
  */
 
@@ -25,12 +29,15 @@ const bundles: Record<LangCode, Bundle> = { ru, en };
 let currentLang: LangCode = 'ru';
 let bundle: Bundle = bundles.ru;
 
+export interface I18nChangedEvent extends CustomEvent<{ lang: LangCode }> {}
+
 export function loadLang(lang: LangCode): void {
   bundle = bundles[lang];
   currentLang = lang;
   if (typeof document !== 'undefined') {
     document.documentElement.lang = lang;
-    document.dispatchEvent(new CustomEvent('i18n:changed'));
+    applyI18nToDom(document);
+    document.dispatchEvent(new CustomEvent('i18n:changed', { detail: { lang } }));
   }
 }
 
