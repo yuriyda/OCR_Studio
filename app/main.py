@@ -200,7 +200,6 @@ app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 @app.post("/api/ocr")
 async def upload_files(
     files_in: list[UploadFile] = File(..., alias="files"),
-    format: str = Form("md"),
     lang: str = Form("ru"),
     project_id: int = Form(INBOX_ID),
 ):
@@ -208,9 +207,8 @@ async def upload_files(
 
     Response shape: {ids: [<created doc ids>], warnings: [], errors: [{filename, error}]}.
     `warnings` заполняется в Task 10 (page-warning для PDF >50 страниц).
+    format всегда 'md' (canonical); TXT/DOCX генерируются лениво через /api/result.
     """
-    if format not in ("md", "txt", "docx"):
-        raise HTTPException(400, "Invalid format. Use md, txt, or docx.")
     if lang not in ("ru", "en"):
         raise HTTPException(400, "Invalid language. Use ru or en.")
 
@@ -238,7 +236,7 @@ async def upload_files(
                 doc_id=doc_id,
                 project_id=project_id,
                 filename=Path(f.filename or "file").name,
-                format=format,
+                format="md",  # ВСЕГДА md (canonical), TXT/DOCX генерируются лениво
                 lang=lang,
                 size_bytes=len(content),
             )

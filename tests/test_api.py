@@ -853,3 +853,18 @@ def test_rendered_endpoint_format_unavailable_for_legacy(client):
 
     r = client.get(f"/api/rendered/{doc_id}?format=docx")
     assert r.status_code == 404
+
+
+def test_upload_creates_doc_with_md_format_regardless_of_request(client):
+    """После Task 7: backend всегда создаёт doc с format='md'.
+
+    Даже если клиент случайно отправил format=docx — игнорируется.
+    """
+    import io
+    files = [("files", ("a.png", io.BytesIO(b"fake"), "image/png"))]
+    r = client.post("/api/ocr", files=files, data={"format": "docx", "project_id": "1"})
+    assert r.status_code == 200
+    doc_id = r.json()["ids"][0]
+    docs = client.get("/api/status").json()
+    target = next(d for d in docs if d["id"] == doc_id)
+    assert target["format"] == "md"
