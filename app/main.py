@@ -334,7 +334,14 @@ def _doc_response(d: dict) -> dict:
 
 
 @app.get("/api/result/{doc_id}")
-async def download_result(doc_id: str):
+async def download_result(doc_id: str, format: str | None = None):
+    """Download result file. Поддерживает lazy-generation TXT/DOCX из result.md.
+
+    - ?format=md|txt|docx — явный выбор формата.
+    - Без format — берёт `documents.format` из БД (backward compat).
+    - Если запрошенный формат отсутствует, но result.md есть — генерит из md, сохраняет, отдаёт.
+    - Если result.md нет (legacy без md-источника) — 404 для всех кроме фактического формата.
+    """
     conn = _conn()
     try:
         doc = DocumentRepo(conn).get(doc_id)
@@ -342,15 +349,30 @@ async def download_result(doc_id: str):
             raise HTTPException(404, "Document not found")
         if doc["status"] != "done":
             raise HTTPException(400, f"Document status: {doc['status']}")
-        path = files.result_path(DATA_DIR, doc_id)
-        if not path or not path.exists():
-            raise HTTPException(404, "Result file missing")
+
+        requested = format or doc["format"]
+        if requested not in files.SUPPORTED_RESULT_FORMATS:
+            raise HTTPException(400, f"Invalid format: {requested}")
+
+        path = files.result_path_for_format(DATA_DIR, doc_id, requested)
+        if path is None:
+            md_path = files.result_path_for_format(DATA_DIR, doc_id, "md")
+            if md_path is None:
+                raise HTTPException(404, f"Format '{requested}' not available; no markdown source for legacy document")
+            md_text = md_path.read_text(encoding="utf-8")
+            if requested == "txt":
+                path = files.save_result(DATA_DIR, doc_id, converters.md_to_txt(md_text), "txt")
+            elif requested == "docx":
+                path = files.save_result(DATA_DIR, doc_id, converters.md_to_docx(md_text), "docx")
+            else:
+                raise HTTPException(404, "Result file missing")
+
         media = {
-            ".md": "text/markdown",
-            ".txt": "text/plain",
-            ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "md": "text/markdown; charset=utf-8",
+            "txt": "text/plain; charset=utf-8",
+            "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         }
-        return FileResponse(path, filename=path.name, media_type=media.get(path.suffix, "application/octet-stream"))
+        return FileResponse(str(path), filename=path.name, media_type=media[requested])
     finally:
         conn.close()
 

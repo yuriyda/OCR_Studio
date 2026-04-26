@@ -684,3 +684,97 @@ def test_worker_saves_only_result_md(tmp_data_dir):
             # На диске только result.md (даже при format=docx в DB)
             formats = files_mod.available_formats(main.DATA_DIR, doc_id)
             assert formats == ["md"], f"expected only ['md'], got {formats}"
+
+
+# ---------------------------------------------------------------------------
+# Task 4: /api/result/{doc_id}?format=md|txt|docx lazy generation tests
+# ---------------------------------------------------------------------------
+
+def test_result_endpoint_format_md_returns_existing(client):
+    """?format=md отдаёт result.md если существует."""
+    upload = _upload(client).json()
+    doc_id = upload["ids"][0]
+    _force_done(doc_id, "# md content", "md")
+    r = client.get(f"/api/result/{doc_id}?format=md")
+    assert r.status_code == 200
+    assert "text/markdown" in r.headers.get("content-type", "") or r.text == "# md content"
+
+
+def test_result_endpoint_format_docx_lazy_generates_from_md(client):
+    """?format=docx — впервые конвертит из result.md, сохраняет, отдаёт."""
+    from app import files as files_mod
+    import app.main as m
+    upload = _upload(client).json()
+    doc_id = upload["ids"][0]
+    _force_done(doc_id, "# md content\n\nbody", "md")
+    assert files_mod.result_path_for_format(m.DATA_DIR, doc_id, "docx") is None
+
+    r = client.get(f"/api/result/{doc_id}?format=docx")
+    assert r.status_code == 200
+    assert r.content[:2] == b"PK"
+    assert files_mod.result_path_for_format(m.DATA_DIR, doc_id, "docx") is not None
+
+
+def test_result_endpoint_format_docx_idempotent(client):
+    """Повторный ?format=docx отдаёт с диска, не регенерит."""
+    from app import files as files_mod
+    import app.main as m
+    upload = _upload(client).json()
+    doc_id = upload["ids"][0]
+    _force_done(doc_id, "# md", "md")
+
+    r1 = client.get(f"/api/result/{doc_id}?format=docx")
+    p = files_mod.result_path_for_format(m.DATA_DIR, doc_id, "docx")
+    assert p is not None
+    mtime1 = p.stat().st_mtime
+
+    import time
+    time.sleep(0.05)
+    r2 = client.get(f"/api/result/{doc_id}?format=docx")
+    mtime2 = p.stat().st_mtime
+    assert r1.content == r2.content
+    assert mtime1 == mtime2
+
+
+def test_result_endpoint_format_unavailable_for_legacy(client):
+    """Legacy: на диске только result.txt, нет result.md → ?format=docx → 404."""
+    from app import files as files_mod
+    import app.main as m
+    upload = _upload(client).json()
+    doc_id = upload["ids"][0]
+    from app.storage import DocumentRepo
+    conn = m._conn()
+    DocumentRepo(conn).update(doc_id, status="done", format="txt")
+    conn.commit()
+    conn.close()
+    files_mod.save_result(m.DATA_DIR, doc_id, "plain text only", "txt")
+
+    r = client.get(f"/api/result/{doc_id}?format=docx")
+    assert r.status_code == 404
+
+
+def test_result_endpoint_format_native_for_legacy(client):
+    """Legacy с result.txt: ?format=txt отдаёт его."""
+    from app import files as files_mod
+    import app.main as m
+    upload = _upload(client).json()
+    doc_id = upload["ids"][0]
+    from app.storage import DocumentRepo
+    conn = m._conn()
+    DocumentRepo(conn).update(doc_id, status="done", format="txt")
+    conn.commit()
+    conn.close()
+    files_mod.save_result(m.DATA_DIR, doc_id, "plain text", "txt")
+
+    r = client.get(f"/api/result/{doc_id}?format=txt")
+    assert r.status_code == 200
+    assert r.text == "plain text"
+
+
+def test_result_endpoint_default_format_uses_db_field(client):
+    """Без query param — backend использует documents.format из БД (backward compat)."""
+    upload = _upload(client).json()
+    doc_id = upload["ids"][0]
+    _force_done(doc_id, "# md", "md")
+    r = client.get(f"/api/result/{doc_id}")
+    assert r.status_code == 200
