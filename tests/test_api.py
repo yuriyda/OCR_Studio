@@ -778,3 +778,46 @@ def test_result_endpoint_default_format_uses_db_field(client):
     _force_done(doc_id, "# md", "md")
     r = client.get(f"/api/result/{doc_id}")
     assert r.status_code == 200
+
+
+def test_markdown_endpoint_format_txt_lazy_generates(client):
+    """?format=txt — генерит txt из md, отдаёт plain text."""
+    from app import files as files_mod
+    import app.main as m
+    upload = _upload(client).json()
+    doc_id = upload["ids"][0]
+    _force_done(doc_id, "# Heading\n\nbody **bold**", "md")
+    assert files_mod.result_path_for_format(m.DATA_DIR, doc_id, "txt") is None
+
+    r = client.get(f"/api/markdown/{doc_id}?format=txt")
+    assert r.status_code == 200
+    assert "text/plain" in r.headers.get("content-type", "")
+    assert "**" not in r.text
+    assert files_mod.result_path_for_format(m.DATA_DIR, doc_id, "txt") is not None
+
+
+def test_markdown_endpoint_default_returns_md(client):
+    """Без ?format — отдаёт result.md raw."""
+    upload = _upload(client).json()
+    doc_id = upload["ids"][0]
+    _force_done(doc_id, "# raw md", "md")
+    r = client.get(f"/api/markdown/{doc_id}")
+    assert r.status_code == 200
+    assert r.text == "# raw md"
+
+
+def test_markdown_endpoint_format_unavailable_for_legacy(client):
+    """Legacy с result.docx без result.md → ?format=md → 404."""
+    from app import files as files_mod
+    import app.main as m
+    upload = _upload(client).json()
+    doc_id = upload["ids"][0]
+    from app.storage import DocumentRepo
+    conn = m._conn()
+    DocumentRepo(conn).update(doc_id, status="done", format="docx")
+    conn.commit()
+    conn.close()
+    files_mod.save_result(m.DATA_DIR, doc_id, b"PK fake", "docx")
+
+    r = client.get(f"/api/markdown/{doc_id}?format=md")
+    assert r.status_code == 404

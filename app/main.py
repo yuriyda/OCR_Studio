@@ -398,12 +398,15 @@ async def get_source(doc_id: str):
 
 
 @app.get("/api/markdown/{doc_id}")
-async def get_markdown(doc_id: str):
-    """Возвращает raw markdown/текст результата как text/plain.
+async def get_markdown(doc_id: str, format: str = "md"):
+    """Возвращает raw текст результата как text/plain.
 
-    Фронтенд (api.ts::getMarkdown) читает ответ через `_text(resp)` и
-    вставляет содержимое в <pre>. Возврат JSON ломал бы рендеринг.
+    - format='md' (default) → читает result.md.
+    - format='txt' → лениво генерит result.txt из result.md, отдаёт.
+    - 404 если запрошенный формат недоступен (legacy без md-источника).
     """
+    if format not in ("md", "txt"):
+        raise HTTPException(400, f"Invalid format for markdown endpoint: {format}")
     conn = _conn()
     try:
         doc = DocumentRepo(conn).get(doc_id)
@@ -411,10 +414,19 @@ async def get_markdown(doc_id: str):
             raise HTTPException(404, "Document not found")
         if doc["status"] != "done":
             raise HTTPException(400, f"Document status: {doc['status']}")
-        path = files.result_path(DATA_DIR, doc_id)
-        if not path or not path.exists():
-            raise HTTPException(404, "Result file missing")
-        text = path.read_text(encoding="utf-8") if path.suffix in (".md", ".txt") else ""
+
+        path = files.result_path_for_format(DATA_DIR, doc_id, format)
+        if path is None:
+            if format == "txt":
+                md_path = files.result_path_for_format(DATA_DIR, doc_id, "md")
+                if md_path is None:
+                    raise HTTPException(404, "No markdown source for txt conversion")
+                txt = converters.md_to_txt(md_path.read_text(encoding="utf-8"))
+                path = files.save_result(DATA_DIR, doc_id, txt, "txt")
+            else:
+                raise HTTPException(404, f"Format '{format}' not available")
+
+        text = path.read_text(encoding="utf-8")
         return PlainTextResponse(text, media_type="text/plain; charset=utf-8")
     finally:
         conn.close()
