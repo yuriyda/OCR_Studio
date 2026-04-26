@@ -5,6 +5,7 @@ Unit-тесты для app/ocr_engine.py.
 - Тесты покрывают поведение progress_callback в process_file.
 - Моки используются для изоляции от PaddleOCR и fitz.
 - Не удалять существующие тесты без согласования.
+- Lang-параметр удалён из process_file (ux-cleanup §2) — тесты не передают lang.
 - ВАЖНО: импорт ocr_engine выполняется внутри каждого теста, а не на уровне модуля.
   Это необходимо, потому что другие тесты (test_api.py) сбрасывают sys.modules["app.*"]
   и переимпортируют модули заново; верхнеуровневая ссылка оказалась бы устаревшей.
@@ -40,7 +41,6 @@ def test_process_file_calls_progress_callback_per_page(tmp_path):
          patch("fitz.open", return_value=fake_doc):
         ocr_engine.process_file(
             str(fake_pdf),
-            lang="ru",
             progress_callback=lambda cur, total: callback_calls.append((cur, total)),
         )
 
@@ -65,7 +65,7 @@ def test_process_file_works_without_callback(tmp_path):
     ocr_engine = _get_ocr_engine_module()
     with patch.object(ocr_engine, "get_engine", return_value=fake_engine), \
          patch("fitz.open", return_value=fake_doc):
-        result = ocr_engine.process_file(str(fake_pdf), lang="ru")
+        result = ocr_engine.process_file(str(fake_pdf))
 
     assert isinstance(result, str)
 
@@ -85,7 +85,6 @@ def test_process_file_image_callback_single_page(tmp_path):
     with patch.object(ocr_engine, "get_engine", return_value=fake_engine):
         ocr_engine.process_file(
             str(fake_img),
-            lang="ru",
             progress_callback=lambda cur, total: callback_calls.append((cur, total)),
         )
 
@@ -104,7 +103,6 @@ def test_progress_callback_called_at_start_and_end_of_each_page(monkeypatch, tmp
     fake_engine.predict.return_value = [fake_page, fake_page, fake_page]  # 3 страницы
 
     monkeypatch.setattr(ocr_engine, "_engine", fake_engine, raising=False)
-    monkeypatch.setattr(ocr_engine, "_engine_lang", "ru", raising=False)
 
     img_path = tmp_path / "fake.jpg"
     img_path.write_bytes(b"x")
@@ -112,7 +110,6 @@ def test_progress_callback_called_at_start_and_end_of_each_page(monkeypatch, tmp
     calls = []
     ocr_engine.process_file(
         str(img_path),
-        lang="ru",
         progress_callback=lambda c, t: calls.append((c, t)),
     )
     # Минимум 2 вызова на страницу × 3 страницы = 6.
@@ -123,13 +120,3 @@ def test_progress_callback_called_at_start_and_end_of_each_page(monkeypatch, tmp
     assert calls[-1][0] == 3
 
 
-def test_preload_initializes_engine_for_lang(monkeypatch):
-    """preload(lang) должен вызывать get_engine(lang) и не падать."""
-    from app import ocr_engine
-    monkeypatch.setattr(ocr_engine, "_engine", None, raising=False)
-    monkeypatch.setattr(ocr_engine, "_engine_lang", "ru", raising=False)
-    monkeypatch.setattr(ocr_engine, "PPStructureV3", lambda **kw: object())
-
-    eng = ocr_engine.preload("en")
-    assert eng is not None
-    assert ocr_engine._engine_lang == "en"

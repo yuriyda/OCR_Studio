@@ -2,8 +2,10 @@
 Обёртка над PaddleOCR PPStructureV3.
 
 Редактирование:
-- Не менять public-API `process_file(file_path, lang, progress_callback)` без согласования —
-  его вызывает worker в app/main.py.
+- Язык OCR-движка зафиксирован = 'ru' (cyrillic-модель). Не добавлять lang-параметр
+  обратно без согласования — см. spec ux-cleanup §2.
+- Public-API: `process_file(file_path, progress_callback=None)` — без lang-параметра.
+  Его вызывает worker в app/main.py.
 - Фикс порядка колонок таблиц через сортировку по X-координате (`html_table_to_markdown`)
   не удалять — он чинит баг SLANet (см. memory.md «Table Column Order Fix»).
 - progress_callback вызывается в начале обработки каждой страницы (1-based).
@@ -18,16 +20,19 @@ from paddleocr import PPStructureV3
 logger = logging.getLogger(__name__)
 
 _engine: PPStructureV3 | None = None
-_engine_lang: str = "ru"
 
 
-def get_engine(lang: str = "ru") -> PPStructureV3:
-    """Return (and lazily initialize) the shared PPStructureV3 engine."""
-    global _engine, _engine_lang
-    if _engine is None or _engine_lang != lang:
-        logger.info("Loading PPStructureV3 models (lang=%s, this may take ~30 s)...", lang)
-        _engine = PPStructureV3(use_table_recognition=True, lang=lang)
-        _engine_lang = lang
+def get_engine() -> PPStructureV3:
+    """Return (and lazily initialize) the shared PPStructureV3 engine.
+
+    Язык OCR-движка зафиксирован = 'ru' (cyrillic-модель). Cyrillic-модель
+    хорошо захватывает и латиницу — для смешанных RU+EN документов работает
+    приемлемо без разделения на 2 модели. См. spec ux-cleanup §2.
+    """
+    global _engine
+    if _engine is None:
+        logger.info("Loading PPStructureV3 models (lang=ru, this may take ~30 s)...")
+        _engine = PPStructureV3(use_table_recognition=True, lang='ru')
         logger.info("PPStructureV3 ready.")
     return _engine
 
@@ -142,16 +147,17 @@ def page_to_markdown(page_result, page_num: int) -> str:
 
 def process_file(
     file_path: str,
-    lang: str = "ru",
     progress_callback=None,
 ) -> str:
     """Run OCR on a file and return the result as a markdown string.
+
+    Язык зафиксирован = 'ru' (cyrillic-модель). Lang-параметр удалён — см. spec ux-cleanup §2.
 
     progress_callback(current_page: int, total_pages: int) вызывается дважды на страницу:
     в начале и после обработки. Это даёт UI polling (~2 сек) больше шансов поймать
     обновление прогресса даже при коротких страницах.
     """
-    engine = get_engine(lang)
+    engine = get_engine()
     path = Path(file_path)
 
     # Pre-count pages для PDF; для image — всегда 1
@@ -177,10 +183,3 @@ def process_file(
     return "\n".join(md_parts)
 
 
-def preload(lang: str = "ru"):
-    """Eager-load the engine for given language. Returns the engine instance.
-
-    Используется `/api/engine/preload` (Task 8) — позволяет UI триггерить
-    предзагрузку моделей при смене engine-lang без ожидания первой OCR-задачи.
-    """
-    return get_engine(lang)

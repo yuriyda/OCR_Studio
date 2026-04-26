@@ -514,14 +514,12 @@ async def delete_document(doc_id: str):
 
 @app.get("/api/system")
 async def system_info():
-    from .ocr_engine import _engine, _engine_lang
+    from .ocr_engine import _engine
     if _engine is None:
         status = "loading"
-        lang = None
     else:
         status = "ready"
-        lang = _engine_lang
-    return sys_info.get_system_info(engine_status=status, engine_lang=lang)
+    return sys_info.get_system_info(engine_status=status, engine_lang="ru")
 
 
 ALLOWED_ENGINE_LANGS = {"ru", "en"}
