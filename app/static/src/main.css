@@ -14,7 +14,7 @@
 
 @layer base {
   body {
-    @apply bg-app-bg text-text font-sans antialiased min-h-screen;
+    @apply bg-app-bg text-text antialiased min-h-screen;
     font-family: -apple-system, system-ui, 'Segoe UI', sans-serif;
   }
   * { box-sizing: border-box; }
@@ -44,8 +44,7 @@
     @apply hover:bg-surface-hover transition-colors;
   }
   .doc-item.active {
-    background: linear-gradient(90deg, rgba(124,131,253,0.18), transparent);
-    @apply border-l-2 border-accent;
+    @apply bg-gradient-to-r from-accent/20 to-transparent border-l-2 border-accent;
   }
   .modal-overlay {
     @apply fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50;
@@ -64,8 +63,8 @@
   .toast-info { @apply border-l-text-muted; }
   .badge { @apply text-xs px-2 py-0.5 rounded uppercase tracking-wider; }
   .badge-queued { @apply bg-surface text-text-muted border border-border; }
-  .badge-done { background: rgba(78,204,163,0.15); @apply text-success border border-success/30; }
-  .badge-error { background: rgba(255,122,146,0.15); @apply text-error border border-error/30; }
+  .badge-done { @apply bg-success/15 text-success border border-success/30; }
+  .badge-error { @apply bg-error/15 text-error border border-error/30; }
   .progress-fill { @apply bg-accent-gradient h-full shadow-neon; }
 }
 
