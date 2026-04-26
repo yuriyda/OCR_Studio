@@ -170,9 +170,8 @@ const polling = new Polling(async (pid) => {
 
 async function uploadFiles(filesList: File[], pid: number): Promise<void> {
   const fmt = $<HTMLSelectElement>('format-select').value as OcrFormat;
-  const lang = $<HTMLSelectElement>('engine-lang-select').value as LangCode;
   try {
-    const resp = await api.uploadDocs(filesList, fmt, lang, pid);
+    const resp = await api.uploadDocs(filesList, fmt, pid);
     for (const w of resp.warnings) {
       const file = filesList.find(_f => true);
       toast.show(t('warning.long_processing', { file: file?.name ?? '?', pages: w.pages }), 'info');
@@ -246,16 +245,6 @@ function bindUI(): void {
     refreshStatusBar();
     refreshRecognizeButton();
     renderResultTabs();
-  });
-
-  $('engine-lang-select').addEventListener('change', async () => {
-    const newLang = ($('engine-lang-select') as HTMLSelectElement).value as LangCode;
-    toast.show(t('toast.engine_loading', { lang: newLang.toUpperCase() }), 'info');
-    try {
-      const r = await api.preloadEngine(newLang);
-      if (r.status === 'ready') toast.show(t('toast.engine_ready'), 'success');
-    } catch (e) { toast.show((e as Error).message, 'error'); }
-    refreshSystem();
   });
 
   $('format-select').addEventListener('change', () => {
