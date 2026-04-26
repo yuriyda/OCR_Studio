@@ -36,6 +36,7 @@
   "warning.long_processing": "{file}: {pages} страниц — обработка может занять несколько минут",
   "preview.empty": "Выберите документ для просмотра результата",
   "preview.unavailable": "Превью недоступно",
+  "preview.source_unavailable": "Источник недоступен — переоцифруй документ для всех форматов",
   "preview.source.empty": "Выберите документ слева",
   "statusbar.engine_ready": "● готов",
   "statusbar.engine_loading": "● загрузка",

@@ -16,7 +16,7 @@ import { loadLang, applyI18nToDom, t } from './i18n';
 import { renderProjects, INBOX_ID } from './projects';
 import { renderDocuments, applySort } from './documents';
 import { renderSourcePane } from './source';
-import { renderResult, tabsForFormat, type ResultTabKey } from './preview';
+import { renderResult, allResultTabs, TAB_TO_FORMAT, isTabAvailable, type ResultTabKey } from './preview';
 import { renderStatusBar } from './statusbar';
 import { handleDrop, startDocDrag } from './drag';
 import { Polling } from './polling';
@@ -116,9 +116,13 @@ async function selectDocument(docId: string): Promise<void> {
   const doc = docsCache.find(d => d.id === docId) ?? null;
   if (doc) {
     if (doc.status === 'done') {
-      const tabs = tabsForFormat(doc.format);
-      if (tabs[0] && tabs.findIndex(tab => tab.key === resultTab) === -1) {
-        resultTab = tabs[0].key;
+      // Дефолт — markdown, если доступен; иначе первый доступный таб.
+      const tabs = allResultTabs();
+      if (isTabAvailable('markdown', doc.available_formats)) {
+        resultTab = 'markdown';
+      } else {
+        const firstAvailable = tabs.find(tab => isTabAvailable(tab.key, doc.available_formats));
+        if (firstAvailable) resultTab = firstAvailable.key;
       }
     }
     await loadPagePreviews(docId);
@@ -136,12 +140,21 @@ function rerenderSource(): void {
 
 function renderResultTabs(): void {
   const doc = docsCache.find(d => d.id === selectedDocId);
-  const tabs = doc ? tabsForFormat(doc.format) : [];
   const container = $('result-tabs');
-  container.innerHTML = tabs.map(tab => `
-    <button class="px-3 py-1.5 rounded-t border-b-2 ${tab.key === resultTab ? 'border-accent text-text bg-accent/10' : 'border-transparent text-text-muted'}" data-tab="${tab.key}">${tab.label}</button>
-  `).join('');
+  if (!doc) {
+    container.innerHTML = '';
+    return;
+  }
+  const tabs = allResultTabs();
+  container.innerHTML = tabs.map(tab => {
+    const available = isTabAvailable(tab.key, doc.available_formats);
+    const active = tab.key === resultTab ? 'border-accent text-text bg-accent/10' : 'border-transparent text-text-muted';
+    const disabledCls = !available ? 'opacity-30 cursor-not-allowed' : '';
+    const titleAttr = !available ? `title="${t('preview.source_unavailable')}"` : '';
+    return `<button class="px-3 py-1.5 rounded-t border-b-2 ${active} ${disabledCls}" data-tab="${tab.key}" ${!available ? 'disabled' : ''} ${titleAttr}>${tab.label}</button>`;
+  }).join('');
   container.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach(btn => {
+    if (btn.disabled) return;
     btn.addEventListener('click', () => {
       resultTab = btn.dataset.tab as ResultTabKey;
       renderResultTabs();
@@ -246,11 +259,6 @@ function bindUI(): void {
     renderResultTabs();
   });
 
-  $('format-select').addEventListener('change', () => {
-    renderResultTabs();
-    rerenderResult();
-  });
-
   $('source-thumbs').addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
     const thumb = target.closest<HTMLElement>('.source-thumb');
@@ -289,8 +297,8 @@ function bindUI(): void {
 
   $('download-btn').addEventListener('click', () => {
     if (selectedDocId === null) return;
-    const doc = docsCache.find(d => d.id === selectedDocId);
-    if (doc) window.open(api.resultUrl(selectedDocId, doc.format), '_blank');
+    const fmt = TAB_TO_FORMAT[resultTab];
+    window.open(api.resultUrl(selectedDocId, fmt), '_blank');
   });
 
   $('copy-btn').addEventListener('click', async () => {

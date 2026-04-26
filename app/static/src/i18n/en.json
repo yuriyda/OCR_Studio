@@ -36,6 +36,7 @@
   "warning.long_processing": "{file}: {pages} pages — processing may take several minutes",
   "preview.empty": "Select a document to view the result",
   "preview.unavailable": "Preview unavailable",
+  "preview.source_unavailable": "Source unavailable — re-recognize document to enable all formats",
   "preview.source.empty": "Select a document on the left",
   "statusbar.engine_ready": "● ready",
   "statusbar.engine_loading": "● loading",

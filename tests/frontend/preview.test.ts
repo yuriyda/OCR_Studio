@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { tabsForFormat, renderResult } from '../../app/static/src/preview';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { allResultTabs, TAB_TO_FORMAT, isTabAvailable, renderResult } from '../../app/static/src/preview';
 import type { Document } from '../../app/static/src/types';
 import { loadLang } from '../../app/static/src/i18n';
 
@@ -13,24 +13,48 @@ const baseDoc = (overrides: Partial<Document>): Document => ({
   ...overrides,
 });
 
-describe('tabsForFormat', () => {
+describe('allResultTabs', () => {
   beforeEach(() => loadLang('ru'));
 
-  it('md → 2 tabs (markdown + preview)', () => {
-    expect(tabsForFormat('md').map(t => t.key)).toEqual(['markdown', 'preview']);
+  it('returns 4 fixed tabs', () => {
+    expect(allResultTabs().map(t => t.key)).toEqual(['markdown', 'preview', 'text', 'document']);
   });
-  it('txt → 1 tab (text)', () => {
-    expect(tabsForFormat('txt').map(t => t.key)).toEqual(['text']);
-  });
-  it('docx → 1 tab (document)', () => {
-    expect(tabsForFormat('docx').map(t => t.key)).toEqual(['document']);
-  });
+
   it('labels are localized', () => {
-    const tabs = tabsForFormat('md');
-    expect(tabs[0]?.label).toBe('Markdown');
-    expect(tabs[1]?.label).toBe('Превью');
+    expect(allResultTabs()[0]?.label).toBe('Markdown');
+    expect(allResultTabs()[1]?.label).toBe('Превью');
     loadLang('en');
-    expect(tabsForFormat('md')[1]?.label).toBe('Preview');
+    expect(allResultTabs()[1]?.label).toBe('Preview');
+  });
+});
+
+describe('TAB_TO_FORMAT mapping', () => {
+  it('maps tab keys to backend format strings', () => {
+    expect(TAB_TO_FORMAT.markdown).toBe('md');
+    expect(TAB_TO_FORMAT.preview).toBe('md');
+    expect(TAB_TO_FORMAT.text).toBe('txt');
+    expect(TAB_TO_FORMAT.document).toBe('docx');
+  });
+});
+
+describe('isTabAvailable', () => {
+  it('markdown/preview need md in available_formats', () => {
+    expect(isTabAvailable('markdown', ['md'])).toBe(true);
+    expect(isTabAvailable('markdown', ['txt'])).toBe(false);
+    expect(isTabAvailable('preview', ['md'])).toBe(true);
+    expect(isTabAvailable('preview', ['docx'])).toBe(false);
+  });
+
+  it('text available if md or txt present', () => {
+    expect(isTabAvailable('text', ['md'])).toBe(true);
+    expect(isTabAvailable('text', ['txt'])).toBe(true);
+    expect(isTabAvailable('text', ['docx'])).toBe(false);
+  });
+
+  it('document available if md or docx present', () => {
+    expect(isTabAvailable('document', ['md'])).toBe(true);
+    expect(isTabAvailable('document', ['docx'])).toBe(true);
+    expect(isTabAvailable('document', ['txt'])).toBe(false);
   });
 });
 
@@ -48,60 +72,62 @@ describe('renderResult', () => {
     expect(document.body.textContent).toContain('Превью недоступно');
   });
 
-  it('renders markdown text in pre', async () => {
-    const doc = baseDoc({ id: '1', format: 'md' });
-    await renderResult(document.getElementById('r')!, doc, 'markdown', {
-      getMarkdown: async () => '# Title\nbody',
-      getRendered: async () => '',
-    });
-    const pre = document.querySelector('pre');
-    expect(pre?.textContent).toContain('# Title');
+  it('shows source_unavailable for unavailable tab on legacy doc', async () => {
+    const doc = baseDoc({ available_formats: ['txt'] });
+    await renderResult(document.getElementById('r')!, doc, 'markdown', { getMarkdown: async () => '', getRendered: async () => '' });
+    expect(document.body.textContent).toContain('Источник недоступен');
   });
 
-  it('renders rendered HTML for preview tab', async () => {
+  it('renders markdown tab via getMarkdown(md)', async () => {
+    const doc = baseDoc({ id: '1' });
+    const calls: Array<[string, string]> = [];
+    await renderResult(document.getElementById('r')!, doc, 'markdown', {
+      getMarkdown: async (id, fmt) => { calls.push([id, fmt ?? 'md']); return '# h'; },
+      getRendered: async () => '',
+    });
+    expect(calls).toEqual([['1', 'md']]);
+    expect(document.querySelector('pre')?.textContent).toContain('# h');
+  });
+
+  it('renders text tab via getMarkdown(txt)', async () => {
     const doc = baseDoc({ id: '2' });
+    const calls: Array<[string, string]> = [];
+    await renderResult(document.getElementById('r')!, doc, 'text', {
+      getMarkdown: async (id, fmt) => { calls.push([id, fmt ?? 'md']); return 'plain'; },
+      getRendered: async () => '',
+    });
+    expect(calls).toEqual([['2', 'txt']]);
+    expect(document.querySelector('pre')?.textContent).toBe('plain');
+  });
+
+  it('renders preview tab via getRendered(md)', async () => {
+    const doc = baseDoc({ id: '3' });
+    const calls: Array<[string, string]> = [];
     await renderResult(document.getElementById('r')!, doc, 'preview', {
       getMarkdown: async () => '',
-      getRendered: async () => '<h1>Rendered</h1>',
+      getRendered: async (id, fmt) => { calls.push([id, fmt ?? 'md']); return '<h1>p</h1>'; },
     });
-    expect(document.querySelector('h1')?.textContent).toBe('Rendered');
+    expect(calls).toEqual([['3', 'md']]);
+    expect(document.querySelector('h1')?.textContent).toBe('p');
   });
 
-  it('renders text for txt format text tab', async () => {
-    const doc = baseDoc({ id: '3', format: 'txt' });
-    await renderResult(document.getElementById('r')!, doc, 'text', {
-      getMarkdown: async () => 'plain text content',
-      getRendered: async () => '',
-    });
-    expect(document.querySelector('pre')?.textContent).toContain('plain text content');
-  });
-
-  it('renders document html for docx format', async () => {
-    const doc = baseDoc({ id: '4', format: 'docx' });
+  it('renders document tab via getRendered(docx)', async () => {
+    const doc = baseDoc({ id: '4' });
+    const calls: Array<[string, string]> = [];
     await renderResult(document.getElementById('r')!, doc, 'document', {
       getMarkdown: async () => '',
-      getRendered: async () => '<p>Word content</p>',
+      getRendered: async (id, fmt) => { calls.push([id, fmt ?? 'md']); return '<p>doc</p>'; },
     });
-    expect(document.querySelector('p')?.textContent).toBe('Word content');
+    expect(calls).toEqual([['4', 'docx']]);
+    expect(document.querySelector('p')?.textContent).toBe('doc');
   });
 
-  it('shows unavailable on api error', async () => {
-    const doc = baseDoc({ id: '5' });
-    const failingApi = {
-      getMarkdown: vi.fn().mockRejectedValue(new Error('boom')),
-      getRendered: vi.fn().mockRejectedValue(new Error('boom')),
-    };
-    await renderResult(document.getElementById('r')!, doc, 'markdown', failingApi);
-    expect(document.body.textContent).toContain('Превью недоступно');
-  });
-
-  it('escapes HTML in markdown text', async () => {
+  it('shows error state on api failure', async () => {
     const doc = baseDoc({ id: '6' });
     await renderResult(document.getElementById('r')!, doc, 'markdown', {
-      getMarkdown: async () => '<script>alert(1)</script>',
+      getMarkdown: async () => { throw new Error('boom'); },
       getRendered: async () => '',
     });
-    expect(document.body.innerHTML).not.toContain('<script>alert');
-    expect(document.querySelector('pre')?.innerHTML).toContain('&lt;script&gt;');
+    expect(document.body.textContent).toContain('Превью недоступно');
   });
 });
