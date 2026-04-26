@@ -80,9 +80,14 @@ export const api = {
   },
 
   async uploadDocs(filesList: File[], format: OcrFormat, projectId: number): Promise<UploadResponse> {
+    // Backend `/api/ocr` читает format и project_id как Form-поля (multipart body),
+    // НЕ как query параметры. Кладём в FormData, иначе backend применит defaults
+    // (format='md', project_id=INBOX_ID) — это была реальная регрессия.
     const fd = new FormData();
     for (const f of filesList) fd.append('files', f);
-    return _json(await fetch(`/api/ocr?project_id=${projectId}&format=${format}`, {
+    fd.append('format', format);
+    fd.append('project_id', String(projectId));
+    return _json(await fetch('/api/ocr', {
       method: 'POST', body: fd,
     }));
   },

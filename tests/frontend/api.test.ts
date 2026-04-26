@@ -101,16 +101,21 @@ describe('api client', () => {
     await expect(api.deleteProject(7)).resolves.toBeUndefined();
   });
 
-  it('uploadDocs builds FormData', async () => {
+  it('uploadDocs sends format + project_id as FormData fields (regression: were in query, defaulted to md)', async () => {
     const f = mockFetch({ ids: ['x'], warnings: [], errors: [] });
     (globalThis as any).fetch = f;
     const file = new File(['data'], 't.pdf', { type: 'application/pdf' });
-    const r = await api.uploadDocs([file], 'md', 1);
+    const r = await api.uploadDocs([file], 'docx', 5);
     expect(r.ids).toEqual(['x']);
     const [url, init] = f.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('/api/ocr?project_id=1&format=md');
+    // URL без query — все Form поля в body
+    expect(url).toBe('/api/ocr');
     expect(init.method).toBe('POST');
-    expect(init.body instanceof FormData).toBe(true);
+    const body = init.body as FormData;
+    expect(body instanceof FormData).toBe(true);
+    expect(body.get('format')).toBe('docx');
+    expect(body.get('project_id')).toBe('5');
+    expect(body.getAll('files')).toHaveLength(1);
   });
 
   it('recognizeProject POSTs query param', async () => {
