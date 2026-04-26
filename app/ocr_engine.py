@@ -147,7 +147,9 @@ def process_file(
 ) -> str:
     """Run OCR on a file and return the result as a markdown string.
 
-    progress_callback(current_page: int, total_pages: int) — вызывается в начале обработки каждой страницы (current_page 1-based).
+    progress_callback(current_page: int, total_pages: int) вызывается дважды на страницу:
+    в начале и после обработки. Это даёт UI polling (~2 сек) больше шансов поймать
+    обновление прогресса даже при коротких страницах.
     """
     engine = get_engine(lang)
     path = Path(file_path)
@@ -160,11 +162,25 @@ def process_file(
             total_pages = doc.page_count
 
     result = engine.predict(str(file_path))
+    pages = list(result)
+    total = max(total_pages, len(pages))
 
     md_parts = [f"# {path.stem}\n"]
-    for page_idx, page_result in enumerate(result):
+    for page_idx, page_result in enumerate(pages):
+        page_num = page_idx + 1
         if progress_callback is not None:
-            progress_callback(page_idx + 1, total_pages)
-        md_parts.append(page_to_markdown(page_result, page_idx + 1))
+            progress_callback(page_num, total)  # start
+        md_parts.append(page_to_markdown(page_result, page_num))
+        if progress_callback is not None:
+            progress_callback(page_num, total)  # end
 
     return "\n".join(md_parts)
+
+
+def preload(lang: str = "ru"):
+    """Eager-load the engine for given language. Returns the engine instance.
+
+    Используется `/api/engine/preload` (Task 8) — позволяет UI триггерить
+    предзагрузку моделей при смене engine-lang без ожидания первой OCR-задачи.
+    """
+    return get_engine(lang)
