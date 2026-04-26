@@ -36,6 +36,20 @@ DB_PATH = DATA_DIR / "data.db"
 
 task_queue: asyncio.Queue = asyncio.Queue()
 
+# Удерживаем ссылки на background-таски, чтобы GC не собрал их преждевременно.
+# Python docs: "Save a reference to the result of asyncio.create_task() to avoid
+# a task disappearing mid-execution." Tasks автоматически удаляются из set по
+# завершении через done_callback.
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _spawn_bg(coro) -> asyncio.Task:
+    """Создать background-таск и удержать ссылку до его завершения."""
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return task
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -52,8 +66,8 @@ async def lifespan(app: FastAPI):
             await task_queue.put(did)
     finally:
         conn.close()
-    asyncio.create_task(worker())
-    asyncio.create_task(orphan_cleanup_loop())
+    _spawn_bg(worker())
+    _spawn_bg(orphan_cleanup_loop())
     asyncio.get_running_loop().run_in_executor(None, ocr_engine.get_engine)
     yield
     # Shutdown — worker и cleanup_loop падают вместе с процессом
