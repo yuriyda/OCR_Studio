@@ -21,16 +21,49 @@ Self-hosted веб-сервис распознавания PDF и изображ
 
 ## Быстрый старт
 
-### Локально
+### Локально (production preview)
+
+Требуется Node 20+ и Python 3.10+.
 
 ```bash
+# Сборка frontend
+npm install
+npm run build
+
+# Установка backend
 pip install -r requirements.txt
+
+# Запуск
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 Открыть `http://localhost:8000` в браузере.
 
 Данные хранятся в `./data/` рядом с `app/` (SQLite + файлы документов).
+
+### Frontend dev (HMR)
+
+В одном терминале — frontend dev-сервер на 5173 с HMR (proxy `/api` → backend):
+
+```bash
+npm run dev
+```
+
+В другом — backend на 8100:
+
+```bash
+OCR_DATA_DIR=./data uvicorn app.main:app --host 0.0.0.0 --port 8100
+```
+
+Открыть `http://localhost:5173`.
+
+### Type-check / тесты
+
+```bash
+npm run type-check     # tsc --noEmit
+npm test               # type-check + vitest run
+pytest tests/          # backend
+```
 
 ### Docker
 
@@ -63,6 +96,27 @@ docker compose up --build
 | `app/main.py` | FastAPI: маршруты, worker, lifespan, batch-zip |
 | `app/static/index.html` + `app/static/js/*.js` | Frontend (vanilla ES modules) |
 
+### Frontend (`app/static/src/`)
+
+| Модуль | Назначение |
+|---|---|
+| `main.ts` | Точка входа, wiring всех модулей |
+| `api.ts` | Типизированный fetch-клиент к backend API |
+| `state.ts` | localStorage state (uiLang, panelSizes, sortMode, activeProjectId) |
+| `i18n.ts` + `i18n/{ru,en}.json` | Переключаемые RU/EN bundles + applyI18nToDom |
+| `types.ts` | Project / Document / SystemInfo / response shapes |
+| `projects.ts` / `documents.ts` | Sidebar renderers |
+| `source.ts` | Source pane (исходный документ крупно) |
+| `preview.ts` | Result pane с адаптивными табами по format |
+| `statusbar.ts` | Status bar (engine/env/project) |
+| `modal.ts` | prompt / confirm dialogs (заменяют нативные) |
+| `toast.ts` | Toasts с иконками ✓⚠ℹ + Esc-close |
+| `menu.ts` | Context menus с role=menu/menuitem |
+| `splitter.ts` | split.js wrapper для resizable панелей |
+| `drag.ts`, `polling.ts`, `clipboard.ts`, `validation.ts`, `icons.ts` | Утилиты |
+
+Сборка: Vite + TypeScript (strict) + Tailwind CSS. Output → `app/static/dist/` (gitignored).
+
 ## Тесты
 
 ```bash
@@ -73,7 +127,10 @@ npm test             # frontend (vitest + jsdom, 74 теста)
 ## API
 
 - `GET /` — UI
-- `POST /api/ocr` — upload документов в проект
+- `POST /api/ocr` — upload файлов в проект (создаёт queued документы; **больше НЕ запускает OCR автоматически** — для этого `/api/recognize`). Возвращает `{ids, warnings, errors}`.
+- `POST /api/recognize?project_id=N` — запуск всех queued документов проекта (новый flow: upload только ставит в очередь, распознавание стартует кнопкой)
+- `POST /api/engine/preload?lang=ru|en` — eager reload OCR-движка при смене языка
+- `GET /api/source/{doc_id}` — оригинальный файл (PDF/image) для крупного просмотра в Source pane
 - `GET /api/status?project_id=N&sort=...&order=...` — список документов с прогрессом, elapsed_seconds, eta_seconds
 - `GET /api/projects`, `POST /api/projects`, `PATCH /api/projects/{id}`, `DELETE /api/projects/{id}` — CRUD проектов
 - `PATCH /api/documents/{id}` — перемещение между проектами; `DELETE /api/documents/{id}` — удаление
@@ -91,7 +148,7 @@ npm test             # frontend (vitest + jsdom, 74 теста)
 - **Preview Markdown**: рендер через `markdown` (extensions `tables`, `fenced_code`, `sane_lists`) + `bleach` (allow-list тегов). Любые `<script>`, `<iframe>`, инлайн-обработчики и `javascript:` URL вырезаются.
 - **Source view DOCX**: недоступен (бинарный формат); открыть документ можно только в режимах Pages или Rendered.
 - **ETA**: оценка вычисляется только при `progress_percent` строго между 0 и 100; для очень коротких задач может быть неточной.
-- **Engine reload**: смена языка в UI триггерит обновление status bar, но фактическая перезагрузка PaddleOCR-моделей происходит только при следующем OCR-запросе с новым языком.
+- **Engine reload**: смена языка через UI триггерит `POST /api/engine/preload` — модели подгружаются в фоне, status bar обновляется при готовности.
 - **Многопоточность**: один worker, один последовательный pipeline OCR. Несколько одновременных запросов кладутся в очередь.
 - **Лимит файла**: 50 MB на файл (хардкод в `MAX_FILE_SIZE`). Frontend проверяет до отправки.
 
