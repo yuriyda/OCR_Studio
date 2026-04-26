@@ -46,6 +46,9 @@ def _pdf_page_count(file_path: str) -> int:
 DATA_DIR = Path(os.environ.get("OCR_DATA_DIR", "data"))
 DB_PATH = DATA_DIR / "data.db"
 
+_STATIC_DIR = Path(__file__).parent / "static"
+_DIST_DIR = _STATIC_DIR / "dist"
+
 task_queue: asyncio.Queue = asyncio.Queue()
 
 # Удерживаем ссылки на background-таски, чтобы GC не собрал их преждевременно.
@@ -187,13 +190,15 @@ def run_orphan_cleanup() -> dict:
 
 # --- Routes ---
 
-@app.get("/", response_class=HTMLResponse)
-async def index():
-    html_path = Path(__file__).parent / "static" / "index.html"
-    return HTMLResponse(html_path.read_text(encoding="utf-8"))
+@app.get("/")
+async def root():
+    index = _DIST_DIR / "index.html"
+    if not index.exists():
+        raise HTTPException(status_code=503, detail="Frontend not built. Run `npm run build`.")
+    return FileResponse(str(index))
 
 
-app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
+app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
 
 @app.post("/api/ocr")
