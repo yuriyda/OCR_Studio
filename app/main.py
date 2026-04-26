@@ -447,6 +447,30 @@ async def system_info():
     return sys_info.get_system_info(engine_status=status, engine_lang=lang)
 
 
+ALLOWED_ENGINE_LANGS = {"ru", "en"}
+
+
+@app.post("/api/engine/preload")
+async def engine_preload(lang: str):
+    """Eager-load OCR engine for given language. Returns immediately.
+
+    Если движок уже загружен под этот же язык — `status: 'ready'`. Иначе —
+    `status: 'loading'`, фактическая загрузка в фоне через _spawn_bg + to_thread.
+    Frontend (Task 29) триггерит этот endpoint при смене engine-lang в UI.
+    """
+    if lang not in ALLOWED_ENGINE_LANGS:
+        raise HTTPException(status_code=400, detail="lang must be one of: ru, en")
+
+    if ocr_engine._engine is not None and ocr_engine._engine_lang == lang:
+        return {"status": "ready"}
+
+    async def _do_preload() -> None:
+        await asyncio.to_thread(ocr_engine.preload, lang)
+
+    _spawn_bg(_do_preload())
+    return {"status": "loading"}
+
+
 @app.get("/api/limits")
 async def get_limits():
     """Информация о лимитах для UI (показ заранее)."""

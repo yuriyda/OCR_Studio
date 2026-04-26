@@ -436,3 +436,28 @@ def test_limits_endpoint(client):
     body = r.json()
     assert body["max_file_size_bytes"] == 50 * 1024 * 1024
     assert ".pdf" in body["allowed_extensions"]
+
+
+def test_engine_preload_invalid_lang_400(client):
+    r = client.post("/api/engine/preload?lang=zz")
+    assert r.status_code == 400
+
+
+def test_engine_preload_returns_loading_when_lang_differs(client, monkeypatch):
+    """Если движок не загружен или загружен под другой язык — возвращаем 'loading'."""
+    from app import ocr_engine
+    monkeypatch.setattr(ocr_engine, "_engine", None, raising=False)
+    monkeypatch.setattr(ocr_engine, "_engine_lang", "ru", raising=False)
+    r = client.post("/api/engine/preload?lang=en")
+    assert r.status_code == 200
+    assert r.json()["status"] == "loading"
+
+
+def test_engine_preload_returns_ready_when_already_loaded(client, monkeypatch):
+    """Если движок уже загружен под этот же язык — сразу 'ready'."""
+    from app import ocr_engine
+    monkeypatch.setattr(ocr_engine, "_engine", object(), raising=False)
+    monkeypatch.setattr(ocr_engine, "_engine_lang", "ru", raising=False)
+    r = client.post("/api/engine/preload?lang=ru")
+    assert r.status_code == 200
+    assert r.json()["status"] == "ready"
