@@ -10,6 +10,8 @@ export default {
         border: { DEFAULT: 'rgba(255,255,255,0.08)', accent: 'rgba(124,131,253,0.2)' },
         text: { DEFAULT: '#e8eaff', muted: '#9aa0d4', faint: '#6c70a0' },
         accent: { DEFAULT: '#7c83fd', secondary: '#ff6b9d', success: '#4ecca3', error: '#ff7a92' },
+        success: '#4ecca3',
+        error: '#ff7a92',
       },
       backgroundImage: {
         'app-bg': 'linear-gradient(135deg, #0a0e27 0%, #1a1a3e 50%, #2d1b4e 100%)',
