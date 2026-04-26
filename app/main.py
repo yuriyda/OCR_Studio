@@ -31,6 +31,18 @@ logger = logging.getLogger(__name__)
 MAX_FILE_SIZE = 50 * 1024 * 1024
 ALLOWED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".webp"}
 
+PAGE_WARNING_THRESHOLD = 50
+
+
+def _pdf_page_count(file_path: str) -> int:
+    """Количество страниц в PDF через PyMuPDF. Возвращает 0 при ошибке."""
+    try:
+        import fitz
+        with fitz.open(file_path) as doc:
+            return doc.page_count
+    except Exception:
+        return 0
+
 DATA_DIR = Path(os.environ.get("OCR_DATA_DIR", "data"))
 DB_PATH = DATA_DIR / "data.db"
 
@@ -208,6 +220,7 @@ async def upload_files(
             raise HTTPException(400, f"Project {project_id} not found")
         doc_repo = DocumentRepo(conn)
         ids: list[str] = []
+        warnings: list[dict] = []
         errors: list[dict] = []
         for f in files_in:
             ext = Path(f.filename or "file").suffix.lower()
@@ -228,9 +241,24 @@ async def upload_files(
                 lang=lang,
                 size_bytes=len(content),
             )
+            # Page-warning для длинных PDF (Task 10): UI покажет «займёт время».
+            # Ошибка PyMuPDF не должна блокировать upload — _pdf_page_count вернёт 0.
+            if ext == ".pdf":
+                try:
+                    saved_path = files.original_path(DATA_DIR, doc_id)
+                    if saved_path is not None:
+                        page_count = _pdf_page_count(str(saved_path))
+                        if page_count > PAGE_WARNING_THRESHOLD:
+                            warnings.append({
+                                "id": doc_id,
+                                "type": "long_processing",
+                                "pages": page_count,
+                            })
+                except Exception:
+                    pass
             # NB: НЕ кладём в task_queue — старт только через POST /api/recognize.
             ids.append(doc_id)
-        return {"ids": ids, "warnings": [], "errors": errors}
+        return {"ids": ids, "warnings": warnings, "errors": errors}
     finally:
         conn.close()
 

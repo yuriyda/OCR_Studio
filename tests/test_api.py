@@ -514,3 +514,34 @@ def test_recognize_endpoint_zero_when_no_queued(client):
     assert r.status_code == 200
     assert r.json()["started"] == 0
     assert r.json()["doc_ids"] == []
+
+
+def test_upload_pdf_long_returns_warning(client, monkeypatch):
+    """PDF >50 страниц должен вернуть warning long_processing с числом страниц."""
+    import app.main as m
+    monkeypatch.setattr(m, "_pdf_page_count", lambda _p: 87)
+    r = _upload(client, name="big.pdf")
+    data = r.json()
+    assert len(data["warnings"]) == 1
+    w = data["warnings"][0]
+    assert w["type"] == "long_processing"
+    assert w["pages"] == 87
+    assert w["id"] == data["ids"][0]
+
+
+def test_upload_pdf_short_no_warning(client, monkeypatch):
+    """PDF <=50 страниц не должен возвращать warning."""
+    import app.main as m
+    monkeypatch.setattr(m, "_pdf_page_count", lambda _p: 5)
+    r = _upload(client, name="small.pdf")
+    data = r.json()
+    assert data["warnings"] == []
+
+
+def test_upload_image_no_warning(client):
+    """Изображения никогда не дают warning."""
+    files = [("files", ("x.png", io.BytesIO(b"fake-png"), "image/png"))]
+    data_form = {"format": "md", "lang": "ru"}
+    r = client.post("/api/ocr", files=files, data=data_form)
+    data = r.json()
+    assert data["warnings"] == []
