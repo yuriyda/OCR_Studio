@@ -5,11 +5,13 @@ SQLite-подключение, инициализация схемы и мигр
 - Любое изменение схемы — через новую функцию миграции _migrate_to_vN.
 - Не менять существующие миграции после релиза — только добавлять новые.
 - Версия схемы хранится в таблице schema_version.
+- Для CHECK-constraints на даты используется GLOB '20[0-9][0-9]-*' —
+  принимает ISO-8601 префикс (с/без таймзоны), отклоняет произвольный текст.
 """
 import sqlite3
 from pathlib import Path
 
-CURRENT_VERSION = 1
+CURRENT_VERSION = 2
 
 
 def get_connection(db_path: Path) -> sqlite3.Connection:
@@ -35,6 +37,9 @@ def init(db_path: Path) -> None:
         if current < 1:
             _migrate_to_v1(conn)
             conn.execute("INSERT INTO schema_version VALUES (1)")
+        if current < 2:
+            _migrate_to_v2(conn)
+            conn.execute("INSERT INTO schema_version VALUES (2)")
         conn.commit()
     finally:
         conn.close()
@@ -68,3 +73,54 @@ def _migrate_to_v1(conn: sqlite3.Connection) -> None:
     CREATE INDEX idx_documents_project ON documents(project_id);
     CREATE INDEX idx_documents_created ON documents(created_at DESC);
     """)
+
+
+def _migrate_to_v2(conn: sqlite3.Connection) -> None:
+    """Добавить CHECK (created_at GLOB '20[0-9][0-9]-*') на projects и documents.
+
+    SQLite не поддерживает ALTER TABLE ADD CONSTRAINT — пересоздаём таблицы
+    через temp-name + INSERT SELECT + DROP + RENAME.
+
+    Важно: FK на время миграции выключаем, иначе DROP TABLE projects сработает
+    как cascade-delete для documents. Возвращаем FK в исходное состояние в конце.
+    """
+    fk_was_on = conn.execute("PRAGMA foreign_keys").fetchone()[0]
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        conn.executescript("""
+        CREATE TABLE projects_v2 (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          name        TEXT NOT NULL UNIQUE,
+          created_at  TEXT NOT NULL CHECK (created_at GLOB '20[0-9][0-9]-*')
+        );
+        INSERT INTO projects_v2 (id, name, created_at)
+          SELECT id, name, created_at FROM projects;
+        DROP TABLE projects;
+        ALTER TABLE projects_v2 RENAME TO projects;
+
+        CREATE TABLE documents_v2 (
+          id              TEXT PRIMARY KEY,
+          project_id      INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          filename        TEXT NOT NULL,
+          format          TEXT NOT NULL CHECK (format IN ('md','txt','docx')),
+          lang            TEXT NOT NULL CHECK (lang IN ('ru','en')),
+          status          TEXT NOT NULL CHECK (status IN ('queued','processing','done','error')),
+          error           TEXT,
+          created_at      TEXT NOT NULL CHECK (created_at GLOB '20[0-9][0-9]-*'),
+          started_at      TEXT,
+          finished_at     TEXT,
+          page_count      INTEGER,
+          current_page    INTEGER,
+          progress_percent REAL,
+          size_bytes      INTEGER
+        );
+        INSERT INTO documents_v2 SELECT * FROM documents;
+        DROP TABLE documents;
+        ALTER TABLE documents_v2 RENAME TO documents;
+
+        CREATE INDEX idx_documents_project ON documents(project_id);
+        CREATE INDEX idx_documents_created ON documents(created_at DESC);
+        """)
+    finally:
+        if fk_was_on:
+            conn.execute("PRAGMA foreign_keys = ON")
