@@ -99,6 +99,22 @@ def _walk_block(doc, node):
         # Visual separator — empty paragraph; python-docx не имеет dedicated horizontal rule.
         doc.add_paragraph("")
         return
+    if name == "table":
+        rows = node.find_all("tr")
+        if not rows:
+            return
+        rows_cells = [r.find_all(["td", "th"]) for r in rows]
+        num_cols = max(len(r) for r in rows_cells) if rows_cells else 0
+        if num_cols == 0:
+            return
+        table = doc.add_table(rows=len(rows_cells), cols=num_cols)
+        table.style = "Table Grid"
+        for ri, cells in enumerate(rows_cells):
+            for ci, cell in enumerate(cells):
+                if ci < num_cols:
+                    table.rows[ri].cells[ci].text = cell.get_text().strip()
+        doc.add_paragraph("")  # spacer after table
+        return
     # Other block tags handled in later tasks.
 
 

@@ -139,3 +139,30 @@ def test_html_to_docx_hr_creates_separator_paragraph():
     assert "before" in paras
     assert "after" in paras
     assert paras.index("before") < paras.index("after")
+
+
+def test_html_to_docx_table_basic_2x2():
+    html = """
+    <table>
+      <thead><tr><th>A</th><th>B</th></tr></thead>
+      <tbody><tr><td>1</td><td>2</td></tr></tbody>
+    </table>
+    """
+    data = html_to_docx(html)
+    doc = _open_docx(data)
+    assert len(doc.tables) == 1
+    t = doc.tables[0]
+    assert len(t.rows) == 2 and len(t.columns) == 2
+    assert t.rows[0].cells[0].text == "A"
+    assert t.rows[0].cells[1].text == "B"
+    assert t.rows[1].cells[0].text == "1"
+    assert t.rows[1].cells[1].text == "2"
+
+
+def test_html_to_docx_table_uneven_rows_padded():
+    html = "<table><tr><td>a</td><td>b</td><td>c</td></tr><tr><td>x</td></tr></table>"
+    data = html_to_docx(html)
+    doc = _open_docx(data)
+    t = doc.tables[0]
+    assert len(t.columns) == 3  # max width
+    assert t.rows[1].cells[0].text == "x"
