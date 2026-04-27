@@ -86,3 +86,34 @@ def test_available_formats_lists_only_existing(tmp_data_dir):
 def test_available_formats_empty_for_missing_doc(tmp_data_dir):
     from app import files
     assert files.available_formats(tmp_data_dir, "nonexistent") == []
+
+
+def test_preview_dir_returns_path_under_doc_dir(tmp_path):
+    from app import files
+    p = files.preview_dir(tmp_path, "abc123")
+    assert p == tmp_path / "docs" / "abc123" / "preview"
+
+
+def test_preview_thumb_path(tmp_path):
+    from app import files
+    p = files.preview_thumb_path(tmp_path, "abc123", 1)
+    assert p == tmp_path / "docs" / "abc123" / "preview" / "thumb_001.jpg"
+
+
+def test_preview_thumb_path_pads_to_3_digits(tmp_path):
+    from app import files
+    p = files.preview_thumb_path(tmp_path, "abc", 42)
+    assert p.name == "thumb_042.jpg"
+
+
+def test_preview_page_path(tmp_path):
+    from app import files
+    p = files.preview_page_path(tmp_path, "abc123", 5)
+    assert p == tmp_path / "docs" / "abc123" / "preview" / "page_005.jpg"
+
+
+def test_preview_dir_created_by_save_helpers(tmp_path):
+    from app import files
+    # ensure_preview_dir creates if missing
+    d = files.ensure_preview_dir(tmp_path, "abc123")
+    assert d.exists() and d.is_dir()

@@ -106,3 +106,29 @@ def list_doc_dirs(data_dir: Path) -> list[str]:
     if not root.exists():
         return []
     return [p.name for p in root.iterdir() if p.is_dir()]
+
+
+def preview_dir(data_dir: Path, doc_id: str) -> Path:
+    """Папка preview/ внутри директории документа.
+
+    Кэш миниатюр (thumb_NNN.jpg) и full-страниц (page_NNN.jpg) рендерится
+    при первом запросе и переиспользуется. Удаляется вместе с doc_dir.
+    """
+    return doc_dir(data_dir, doc_id) / "preview"
+
+
+def ensure_preview_dir(data_dir: Path, doc_id: str) -> Path:
+    """Гарантирует существование preview/, возвращает Path."""
+    p = preview_dir(data_dir, doc_id)
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def preview_thumb_path(data_dir: Path, doc_id: str, page_num: int) -> Path:
+    """Путь к миниатюре страницы (1-indexed). Имя: thumb_NNN.jpg."""
+    return preview_dir(data_dir, doc_id) / f"thumb_{page_num:03d}.jpg"
+
+
+def preview_page_path(data_dir: Path, doc_id: str, page_num: int) -> Path:
+    """Путь к full-разрешению странице (1-indexed). Имя: page_NNN.jpg."""
+    return preview_dir(data_dir, doc_id) / f"page_{page_num:03d}.jpg"
