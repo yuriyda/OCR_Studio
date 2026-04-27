@@ -102,12 +102,47 @@ function refreshRecognizeButton(): void {
   }
 }
 
-async function loadPagePreviews(docId: string): Promise<void> {
+async function loadPagePreviews(
+  docId: string,
+  onProgress?: (cur: number, total: number) => void,
+): Promise<void> {
   if (previewPagesCache.has(docId)) return;
+  // Параллельно с blocking-вызовом /thumbs опрашиваем /info чтобы поймать
+  // _preview_progress (см. preview_render.render_thumbs). Backend начинает
+  // рендерить ПОСЛЕ прихода GET /thumbs — даём ~150мс задержку перед первым
+  // poll, чтобы избежать window'а где progress=null.
+  let pollTimer: number | null = null;
+  let stopped = false;
+  const startPolling = () => {
+    pollTimer = window.setInterval(async () => {
+      if (stopped) return;
+      try {
+        const info = await api.getPreviewInfo(docId);
+        if (info.thumbs_progress && onProgress) {
+          onProgress(info.thumbs_progress.current, info.thumbs_progress.total);
+        }
+      } catch { /* ignore */ }
+    }, 500);
+  };
+  const startTimer = window.setTimeout(startPolling, 150);
   try {
     const data = await api.getPreviewThumbs(docId);
     previewPagesCache.set(docId, data.pages);
   } catch { /* ignore */ }
+  finally {
+    stopped = true;
+    window.clearTimeout(startTimer);
+    if (pollTimer !== null) window.clearInterval(pollTimer);
+  }
+}
+
+function showSourceLoading(initialLabel: string): void {
+  $('source-thumbs').style.display = 'none';
+  $('source-thumbs').innerHTML = '';
+  $('source-large').innerHTML = `<div class="text-text-muted text-center py-10">
+    <div class="inline-block w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin"></div>
+    <div class="mt-2" id="preview-progress-label">${initialLabel}</div>
+  </div>`;
 }
 
 async function selectDocument(docId: string): Promise<void> {
@@ -125,7 +160,14 @@ async function selectDocument(docId: string): Promise<void> {
         if (firstAvailable) resultTab = firstAvailable.key;
       }
     }
-    await loadPagePreviews(docId);
+    if (!previewPagesCache.has(docId)) {
+      // UI не «застывает» — мгновенный спиннер до прихода thumbs.
+      showSourceLoading(t('preview.source.loading'));
+    }
+    await loadPagePreviews(docId, (cur, total) => {
+      const label = document.getElementById('preview-progress-label');
+      if (label) label.textContent = t('preview.source.rendering', { current: cur, total });
+    });
     rerenderSource();
     renderResultTabs();
     await rerenderResult();

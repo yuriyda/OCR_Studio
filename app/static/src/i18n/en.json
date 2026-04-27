@@ -39,6 +39,8 @@
   "preview.unavailable": "Preview unavailable",
   "preview.source_unavailable": "Source unavailable — re-recognize document to enable all formats",
   "preview.source.empty": "Select a document on the left",
+  "preview.source.loading": "Loading preview…",
+  "preview.source.rendering": "Rendering preview {current}/{total} pages",
   "statusbar.engine_ready": "● ready",
   "statusbar.engine_loading": "● loading",
   "statusbar.docs_total": "{count} docs · {size}"
