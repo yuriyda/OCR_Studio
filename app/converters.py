@@ -2,17 +2,22 @@
 Конвертеры результата OCR: markdown → plain txt, markdown → docx.
 
 Редактирование:
-- md_to_txt: regex-стрипы только базовые (заголовки, bold/italic) — не превращать в полноценный
-  markdown-парсер.
-- md_to_docx: использует python-docx; таблицы и заголовки обязательны для соответствия ТЗ §2.
-- Не добавлять зависимости — только stdlib + python-docx.
+- md_to_txt: regex-стрипы только базовые (заголовки, bold/italic).
+- md_to_docx: рендерится через markdown→HTML→html_to_docx walker. HTML парсится
+  BeautifulSoup, walk по DOM строит python-docx структуры. Inline-парсинг (bold/italic/
+  code/links) делегирован markdown library — не дублировать.
+- Не добавлять зависимости — bs4, markdown, python-docx уже в requirements.
 """
+from __future__ import annotations
 
 import io
 import re
 
+from bs4 import BeautifulSoup, NavigableString
 from docx import Document
 from docx.shared import Pt
+
+from . import preview as _preview
 
 
 def md_to_txt(md: str) -> str:
@@ -20,72 +25,56 @@ def md_to_txt(md: str) -> str:
     lines = md.split("\n")
     out = []
     for line in lines:
-        # Remove heading markers
         line = re.sub(r"^#{1,6}\s+", "", line)
-        # Remove bold/italic
         line = re.sub(r"\*{1,3}(.+?)\*{1,3}", r"\1", line)
         out.append(line)
     return "\n".join(out)
 
 
-def md_to_docx(md: str) -> bytes:
-    """Convert markdown to a .docx file. Returns bytes."""
+_HEADING_TAGS = {"h1": 1, "h2": 2, "h3": 3, "h4": 4, "h5": 4, "h6": 4}
+
+
+def html_to_docx(html: str) -> bytes:
+    """Walk sanitized HTML → python-docx structures → bytes.
+
+    Поддерживает (в Task 7): h1-h6, p. Списки/inline/code/blockquote/hr/tables —
+    в следующих задачах 8-11.
+    """
     doc = Document()
     style = doc.styles["Normal"]
     style.font.name = "Arial"
     style.font.size = Pt(11)
 
-    lines = md.split("\n")
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-
-        # Headings
-        if line.startswith("# "):
-            level = 0
-            stripped = line.lstrip("#")
-            level = len(line) - len(stripped)
-            level = min(level, 4)
-            doc.add_heading(stripped.strip(), level=level)
-            i += 1
-            continue
-
-        # Table: collect consecutive lines starting with |
-        if line.startswith("|"):
-            table_lines = []
-            while i < len(lines) and lines[i].startswith("|"):
-                # Skip separator rows
-                if re.match(r"^\|[\s\-:|]+\|$", lines[i]):
-                    i += 1
-                    continue
-                table_lines.append(lines[i])
-                i += 1
-
-            if table_lines:
-                rows_data = []
-                for tl in table_lines:
-                    cells = [c.strip() for c in tl.strip("|").split("|")]
-                    rows_data.append(cells)
-
-                num_cols = max(len(r) for r in rows_data)
-                table = doc.add_table(rows=len(rows_data), cols=num_cols)
-                table.style = "Table Grid"
-                for ri, row_data in enumerate(rows_data):
-                    for ci, cell_text in enumerate(row_data):
-                        if ci < num_cols:
-                            table.rows[ri].cells[ci].text = cell_text
-                doc.add_paragraph("")
-            continue
-
-        # Empty line
-        if not line.strip():
-            i += 1
-            continue
-
-        # Regular paragraph
-        doc.add_paragraph(line)
-        i += 1
+    soup = BeautifulSoup(html or "", "html.parser")
+    for child in soup.children:
+        _walk_block(doc, child)
 
     buf = io.BytesIO()
     doc.save(buf)
     return buf.getvalue()
+
+
+def _walk_block(doc, node):
+    """Walk top-level (block) HTML node → docx paragraph/heading."""
+    if isinstance(node, NavigableString):
+        text = str(node).strip()
+        if text:
+            doc.add_paragraph(text)
+        return
+    name = (node.name or "").lower()
+    if name in _HEADING_TAGS:
+        doc.add_heading(node.get_text().strip(), level=_HEADING_TAGS[name])
+        return
+    if name == "p":
+        doc.add_paragraph(node.get_text().strip())
+        return
+    # Other block tags handled in later tasks 8-11.
+
+
+def md_to_docx(md: str) -> bytes:
+    """Convert markdown to a .docx file. Returns bytes.
+
+    Делегирует: markdown → HTML (preview.markdown_to_html) → docx (html_to_docx).
+    """
+    html = _preview.markdown_to_html(md or "")
+    return html_to_docx(html)
