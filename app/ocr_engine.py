@@ -61,16 +61,36 @@ class _Hooked:
 
 
 def install_stage_hooks(engine, on_stage_start) -> None:
-    """Wrap sub-models on engine.paddlex_pipeline so on_stage_start(name) fires
+    """Wrap sub-models on engine's INTERNAL pipeline(s) so on_stage_start(name) fires
     before each model invocation. Side-effect: replaces attributes in place.
 
-    Идемпотентно: если атрибут — наша обёртка _Hooked, не оборачиваем повторно.
-    Названия stage соответствуют user-facing labels: layout, text, table, formula,
-    region, chart. Sub-model отсутствует (опциональный pipeline) — просто пропускаем.
+    NB: `engine.paddlex_pipeline` — это `AutoParallelSimpleInferencePipeline`-обёртка.
+    Реальный `LayoutParsingPipelineV2` лежит в `_pipeline` (single-device) или
+    в `_pipelines[*]` (multi-device). __getattr__ wrapper-а проксирует ЧТЕНИЕ, но
+    setattr на wrapper НЕ пробрасывается — поэтому `LayoutParsingPipelineV2.predict()`,
+    вызывая `self.layout_det_model(...)`, обходит наш wrap. Чтобы hooks реально срабатывали,
+    оборачиваем атрибуты на каждом ВНУТРЕННЕМ pipeline.
+
+    Идемпотентно: если атрибут — наша обёртка _Hooked, переустанавливаем callback.
+    Stage name соответствует user-facing labels (layout, text, table, formula,
+    region, chart). Отсутствующие sub-models просто пропускаем (use_*=False).
     """
     pipeline = getattr(engine, "paddlex_pipeline", None)
     if pipeline is None:
         return
+
+    # Найти ВНУТРЕННИЕ pipelines, где реально живут sub-models.
+    actual_pipelines: list = []
+    if getattr(pipeline, "_multi_device_inference", False):
+        actual_pipelines = list(getattr(pipeline, "_pipelines", []))
+    else:
+        inner_pipeline = getattr(pipeline, "_pipeline", None)
+        if inner_pipeline is not None:
+            actual_pipelines = [inner_pipeline]
+
+    # Fallback для тестов с MagicMock-pipeline без _pipeline атрибута.
+    if not actual_pipelines:
+        actual_pipelines = [pipeline]
 
     targets = [
         ("layout_det_model", "layout"),
@@ -80,14 +100,15 @@ def install_stage_hooks(engine, on_stage_start) -> None:
         ("table_recognition_pipeline", "table"),
         ("chart_recognition_model", "chart"),
     ]
-    for attr_name, stage_name in targets:
-        if not hasattr(pipeline, attr_name):
-            continue
-        inner = getattr(pipeline, attr_name)
-        if isinstance(inner, _Hooked):
-            inner.callback = on_stage_start  # update callback (re-install)
-            continue
-        setattr(pipeline, attr_name, _Hooked(inner, on_stage_start, stage_name))
+    for actual in actual_pipelines:
+        for attr_name, stage_name in targets:
+            if not hasattr(actual, attr_name):
+                continue
+            inner = getattr(actual, attr_name)
+            if isinstance(inner, _Hooked):
+                inner.callback = on_stage_start  # update callback (re-install)
+                continue
+            setattr(actual, attr_name, _Hooked(inner, on_stage_start, stage_name))
 
 
 def get_engine() -> PPStructureV3:
