@@ -937,3 +937,77 @@ def test_doc_response_includes_stage_field(client, tmp_data_dir):
     rows = r.json()
     assert rows[0]["stage"] is None  # default
     assert "stage_label" in rows[0]
+
+
+def test_worker_sets_engine_loading_stage_when_engine_not_ready(tmp_data_dir):
+    """When _engine is None, worker should set stage='engine_loading' before calling get_engine."""
+    from unittest.mock import MagicMock, patch
+
+    with patch("app.ocr_engine.process_file", return_value="# stub"), \
+         patch("app.ocr_engine.get_engine"):
+        # Reload modules fresh so we get a clean app instance
+        for mod in list(sys.modules.keys()):
+            if mod.startswith("app"):
+                del sys.modules[mod]
+
+        from app import main, ocr_engine, db, files as files_mod
+        from app.storage import DocumentRepo, ProjectRepo
+
+        main.DATA_DIR = tmp_data_dir
+        main.DB_PATH = tmp_data_dir / "data.db"
+
+        # Set up DB
+        db.init(main.DB_PATH)
+        conn = db.get_connection(main.DB_PATH)
+        ProjectRepo(conn).ensure_inbox()
+        conn.close()
+
+        # Create a doc entry
+        import uuid
+        doc_id = str(uuid.uuid4())
+        conn = db.get_connection(main.DB_PATH)
+        DocumentRepo(conn).create(doc_id, 1, "test.pdf", "md", "ru", size_bytes=100)
+        conn.close()
+
+        # Write a fake original file
+        doc_dir = tmp_data_dir / "docs" / doc_id
+        doc_dir.mkdir(parents=True, exist_ok=True)
+        (doc_dir / "original.pdf").write_bytes(b"%PDF-1.4 fake")
+
+        # Force engine to None
+        ocr_engine._engine = None
+
+        # Track stage transitions
+        stages_seen = []
+        original_update = DocumentRepo.update
+
+        def spy_update(self, doc_id, **fields):
+            if "stage" in fields:
+                stages_seen.append(fields["stage"])
+            return original_update(self, doc_id, **fields)
+
+        # Mock get_engine to set a fake engine
+        fake_engine = MagicMock()
+        fake_engine.predict.return_value = iter([])
+
+        def fake_get_engine():
+            ocr_engine._engine = fake_engine
+            return fake_engine
+
+        # Run worker with mocks applied
+        with patch.object(DocumentRepo, "update", spy_update), \
+             patch.object(ocr_engine, "get_engine", fake_get_engine):
+
+            async def _run_one():
+                await main.task_queue.put(doc_id)
+                worker_task = asyncio.create_task(main.worker())
+                await main.task_queue.join()
+                worker_task.cancel()
+                try:
+                    await worker_task
+                except asyncio.CancelledError:
+                    pass
+
+            asyncio.run(_run_one())
+
+    assert "engine_loading" in stages_seen, f"engine_loading stage not set; saw: {stages_seen}"

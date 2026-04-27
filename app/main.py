@@ -116,6 +116,13 @@ async def worker():
             try:
                 original = files.original_path(DATA_DIR, doc_id)
 
+                # Engine может быть ещё не загружен (~30s). Помечаем stage до синхронной загрузки.
+                if ocr_engine._engine is None:
+                    doc_repo.update(doc_id, stage="engine_loading", stage_updated_at=_now_iso())
+                    await asyncio.to_thread(ocr_engine.get_engine)
+
+                doc_repo.update(doc_id, stage="ocr", stage_updated_at=_now_iso())
+
                 def _progress(cur, total):
                     pcent = round(100.0 * cur / total, 1) if total else None
                     cb_conn = _conn()
@@ -125,6 +132,8 @@ async def worker():
                             current_page=cur,
                             page_count=total,
                             progress_percent=pcent,
+                            stage="ocr",
+                            stage_updated_at=_now_iso(),
                         )
                     finally:
                         cb_conn.close()
@@ -144,11 +153,15 @@ async def worker():
                     status="done",
                     finished_at=_now_iso(),
                     progress_percent=100.0,
+                    stage=None,
+                    stage_updated_at=_now_iso(),
                 )
                 logger.info("Doc %s done: %s", doc_id, doc["filename"])
             except Exception as e:
                 logger.exception("Doc %s failed", doc_id)
-                doc_repo.update(doc_id, status="error", error=str(e), finished_at=_now_iso())
+                doc_repo.update(doc_id, status="error", error=str(e),
+                                finished_at=_now_iso(),
+                                stage=None, stage_updated_at=_now_iso())
         finally:
             conn.close()
             task_queue.task_done()
