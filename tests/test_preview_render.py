@@ -109,3 +109,26 @@ def test_render_page_validates_against_stale_cache(pdf_doc):
     fake.write_bytes(b"stale")
     with pytest.raises(ValueError, match="page"):
         preview_render.render_page(data_dir, doc_id, 99)
+
+
+def test_get_progress_returns_none_when_not_rendering():
+    from app import preview_render
+    assert preview_render.get_progress("nonexistent_doc") is None
+
+
+def test_render_thumbs_updates_progress_during_batch(pdf_doc):
+    """While render_thumbs is running, on_page callback fires per page;
+    after it returns, progress is cleared back to None.
+    """
+    from app import preview_render
+    data_dir, doc_id = pdf_doc
+
+    snapshots = []
+    def hook(cur, total):
+        snapshots.append((cur, total))
+
+    preview_render.render_thumbs(data_dir, doc_id, on_page=hook)
+    # After completion: progress cleared
+    assert preview_render.get_progress(doc_id) is None
+    # Mid-iteration: hook called per page (3-page PDF fixture)
+    assert snapshots == [(1, 3), (2, 3), (3, 3)]

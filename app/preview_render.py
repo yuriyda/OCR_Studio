@@ -20,6 +20,10 @@ THUMB_DPI = 80
 THUMB_QUALITY = 70
 THUMB_MAX_SIDE = 240  # для image-кейса
 
+# In-memory per-doc thumb-rendering progress: doc_id → {"current": N, "total": M}.
+# Не persist'ится в DB — это эфемерное состояние одного процесса.
+_preview_progress: dict[str, dict] = {}
+
 PAGE_DPI = 200
 PAGE_QUALITY = 85
 PAGE_MAX_SIDE = 1600  # для image-кейса
@@ -29,7 +33,7 @@ def _is_pdf(path: Path) -> bool:
     return path.suffix.lower() == ".pdf"
 
 
-def render_thumbs(data_dir: Path, doc_id: str) -> list[Path]:
+def render_thumbs(data_dir: Path, doc_id: str, on_page=None) -> list[Path]:
     """Сгенерировать (или прочитать из кэша) миниатюры всех страниц.
 
     PDF: по странице через PyMuPDF @ THUMB_DPI.
@@ -37,6 +41,11 @@ def render_thumbs(data_dir: Path, doc_id: str) -> list[Path]:
 
     Возвращает список путей в порядке страниц (1-indexed).
     Если миниатюра уже на диске — повторно не рендерим.
+
+    on_page(current: int, total: int) — необязательный callback после каждой
+    страницы. Параллельно обновляет _preview_progress для опроса извне через
+    get_progress() (используется в /api/preview/{id}/info → thumbs_progress).
+    После завершения (даже при исключении) progress очищается.
     """
     original = files.original_path(data_dir, doc_id)
     if original is None or not original.exists():
@@ -49,13 +58,19 @@ def render_thumbs(data_dir: Path, doc_id: str) -> list[Path]:
         import fitz
         with fitz.open(str(original)) as pdf:
             total = pdf.page_count
-            for i in range(total):
-                page_num = i + 1
-                out = files.preview_thumb_path(data_dir, doc_id, page_num)
-                if not out.exists():
-                    pix = pdf[i].get_pixmap(dpi=THUMB_DPI)
-                    out.write_bytes(pix.tobytes("jpeg", THUMB_QUALITY))
-                paths.append(out)
+            try:
+                for i in range(total):
+                    page_num = i + 1
+                    out = files.preview_thumb_path(data_dir, doc_id, page_num)
+                    if not out.exists():
+                        pix = pdf[i].get_pixmap(dpi=THUMB_DPI)
+                        out.write_bytes(pix.tobytes("jpeg", THUMB_QUALITY))
+                    paths.append(out)
+                    _preview_progress[doc_id] = {"current": page_num, "total": total}
+                    if on_page is not None:
+                        on_page(page_num, total)
+            finally:
+                _preview_progress.pop(doc_id, None)
     else:
         from PIL import Image
         out = files.preview_thumb_path(data_dir, doc_id, 1)
@@ -66,6 +81,8 @@ def render_thumbs(data_dir: Path, doc_id: str) -> list[Path]:
                 img.convert("RGB").save(buf, format="JPEG", quality=THUMB_QUALITY)
             out.write_bytes(buf.getvalue())
         paths.append(out)
+        if on_page is not None:
+            on_page(1, 1)
 
     return paths
 
@@ -119,9 +136,5 @@ def render_page(data_dir: Path, doc_id: str, page_num: int) -> Path:
 
 
 def get_progress(doc_id: str) -> dict | None:
-    """Текущий прогресс batch-рендера миниатюр или None если не идёт.
-
-    Заглушка для Task 4 (preview info endpoint). Реальная имплементация
-    с in-memory _preview_progress dict добавляется в Task 19.
-    """
-    return None
+    """Текущий прогресс batch-рендера миниатюр или None если не идёт."""
+    return _preview_progress.get(doc_id)
