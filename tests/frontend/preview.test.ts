@@ -16,8 +16,14 @@ const baseDoc = (overrides: Partial<Document>): Document => ({
 describe('allResultTabs', () => {
   beforeEach(() => loadLang('ru'));
 
-  it('returns 4 fixed tabs', () => {
-    expect(allResultTabs().map(t => t.key)).toEqual(['markdown', 'preview', 'text', 'document']);
+  it('returns 3 fixed tabs', () => {
+    expect(allResultTabs().map(t => t.key)).toEqual(['markdown', 'preview', 'text']);
+  });
+
+  it('allResultTabs returns 3 tabs without document', () => {
+    const tabs = allResultTabs();
+    const keys = tabs.map(t => t.key);
+    expect(keys).toEqual(['markdown', 'preview', 'text']);
   });
 
   it('labels are localized', () => {
@@ -33,7 +39,10 @@ describe('TAB_TO_FORMAT mapping', () => {
     expect(TAB_TO_FORMAT.markdown).toBe('md');
     expect(TAB_TO_FORMAT.preview).toBe('md');
     expect(TAB_TO_FORMAT.text).toBe('txt');
-    expect(TAB_TO_FORMAT.document).toBe('docx');
+  });
+
+  it('TAB_TO_FORMAT does not include document', () => {
+    expect(TAB_TO_FORMAT).not.toHaveProperty('document');
   });
 });
 
@@ -51,11 +60,6 @@ describe('isTabAvailable', () => {
     expect(isTabAvailable('text', ['docx'])).toBe(false);
   });
 
-  it('document available if md or docx present', () => {
-    expect(isTabAvailable('document', ['md'])).toBe(true);
-    expect(isTabAvailable('document', ['docx'])).toBe(true);
-    expect(isTabAvailable('document', ['txt'])).toBe(false);
-  });
 });
 
 describe('renderResult', () => {
@@ -109,17 +113,6 @@ describe('renderResult', () => {
     });
     expect(calls).toEqual([['3', 'md']]);
     expect(document.querySelector('h1')?.textContent).toBe('p');
-  });
-
-  it('renders document tab via getRendered(docx)', async () => {
-    const doc = baseDoc({ id: '4' });
-    const calls: Array<[string, string]> = [];
-    await renderResult(document.getElementById('r')!, doc, 'document', {
-      getMarkdown: async () => '',
-      getRendered: async (id, fmt) => { calls.push([id, fmt ?? 'md']); return '<p>doc</p>'; },
-    });
-    expect(calls).toEqual([['4', 'docx']]);
-    expect(document.querySelector('p')?.textContent).toBe('doc');
   });
 
   it('shows error state on api failure', async () => {

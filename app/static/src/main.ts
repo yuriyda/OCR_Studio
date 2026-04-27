@@ -318,6 +318,11 @@ function bindUI(): void {
     window.open(api.resultUrl(selectedDocId, fmt), '_blank');
   });
 
+  $('download-docx-btn').addEventListener('click', () => {
+    if (selectedDocId === null) return;
+    window.open(api.resultUrl(selectedDocId, 'docx'), '_blank');
+  });
+
   $('copy-btn').addEventListener('click', async () => {
     if (selectedDocId === null) return;
     const doc = docsCache.find(d => d.id === selectedDocId);
