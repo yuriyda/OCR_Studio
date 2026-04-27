@@ -96,3 +96,16 @@ def test_render_page_for_image_only_page_1_valid(tmp_path):
     assert p.exists()
     with pytest.raises(ValueError):
         preview_render.render_page(tmp_path, "img1", 2)
+
+
+def test_render_page_validates_against_stale_cache(pdf_doc):
+    """Stale cache (например, после замены original.pdf на более короткий) не должен
+    затенять ValueError для невалидного page_num. Регрессионный тест к багу I1
+    из код-ревью Task 3."""
+    from app import preview_render, files
+    data_dir, doc_id = pdf_doc  # 3-page PDF
+    files.ensure_preview_dir(data_dir, doc_id)
+    fake = files.preview_page_path(data_dir, doc_id, 99)
+    fake.write_bytes(b"stale")
+    with pytest.raises(ValueError, match="page"):
+        preview_render.render_page(data_dir, doc_id, 99)

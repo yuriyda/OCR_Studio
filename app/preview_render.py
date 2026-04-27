@@ -79,6 +79,10 @@ def render_page(data_dir: Path, doc_id: str, page_num: int) -> Path:
     Raises:
         FileNotFoundError: original отсутствует.
         ValueError: page_num вне диапазона [1, total_pages].
+
+    Note: page_num валидируется ДО раннего возврата по cache hit, чтобы stale-кэш
+    с битой страницей (например, после замены original.pdf на более короткий)
+    не затенял ошибку валидации.
     """
     if page_num < 1:
         raise ValueError(f"page_num must be >= 1, got {page_num}")
@@ -89,19 +93,21 @@ def render_page(data_dir: Path, doc_id: str, page_num: int) -> Path:
 
     files.ensure_preview_dir(data_dir, doc_id)
     out = files.preview_page_path(data_dir, doc_id, page_num)
-    if out.exists():
-        return out
 
     if _is_pdf(original):
         import fitz
         with fitz.open(str(original)) as pdf:
             if page_num > pdf.page_count:
                 raise ValueError(f"page_num {page_num} > pdf.page_count {pdf.page_count}")
+            if out.exists():
+                return out
             pix = pdf[page_num - 1].get_pixmap(dpi=PAGE_DPI)
             out.write_bytes(pix.tobytes("jpeg", PAGE_QUALITY))
     else:
         if page_num != 1:
             raise ValueError(f"image has only page 1, got {page_num}")
+        if out.exists():
+            return out
         from PIL import Image
         with Image.open(original) as img:
             img.thumbnail((PAGE_MAX_SIDE, PAGE_MAX_SIDE))
