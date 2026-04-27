@@ -8,6 +8,7 @@
 
 ## Возможности
 
+- **Контейнерное развёртывание** с прокидыванием GPU — `docker compose up` поднимает всё (Python, PaddlePaddle-GPU, модели, FastAPI, frontend-бандл)
 - Распознавание PDF + изображений (PNG, JPG, BMP, TIFF, WEBP) с поддержкой **таблиц**, **формул**, **структуры макета**
 - Организация документов по проектам (CRUD, drag-and-drop между проектами, пакетное скачивание ZIP)
 - **Реальный постраничный + поэтапный прогресс OCR** ("страница 5/38: распознавание текста") — не симуляция
@@ -21,30 +22,16 @@
 
 OCR Studio использует **PaddleOCR PPStructureV3** для анализа документов. Конвейер выполняет 6 этапов на каждую страницу:
 
-```
-PDF/Изображение
-    │
-    ▼
-┌──────────────────────────────────────────────────────────────────┐
-│ 1. Определение макета       PicoDet-S_layout_3cls                │
-│    Выделяет блоки (текст / таблица / формула / изображение)      │
-│                                                                    │
-│ 2. Определение регионов     PP-DocBlockLayout                    │
-│    Дополнительный структурный проход                             │
-│                                                                    │
-│ 3. Распознавание формул     PP-FormulaNet_plus-L                 │
-│    Извлечение LaTeX из математических регионов                   │
-│                                                                    │
-│ 4. Распознавание текста     PP-OCRv5_server_det                  │
-│                              + eslav_PP-OCRv5_mobile_rec          │
-│    Детекция строк, затем распознавание (кириллическая модель).   │
-│                                                                    │
-│ 5. Распознавание таблиц     SLANet_plus + RT-DETR-L              │
-│                              _wired_table_cell_det               │
-│    Реконструкция HTML-таблицы с детекцией bbox ячеек.            │
-│                                                                    │
-│ 6. Распознавание графиков   (опционально, по умолчанию выключено) │
-└──────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    A[PDF / Image input] --> B
+    B[1\. Layout Detection<br/>PicoDet-S_layout_3cls<br/><i>blocks: text / table / formula / image / chart</i>] --> C
+    C[2\. Region Detection<br/>PP-DocBlockLayout<br/><i>secondary structural pass</i>] --> D
+    D[3\. Formula Recognition<br/>PP-FormulaNet_plus-L<br/><i>LaTeX from math regions</i>] --> E
+    E[4\. Text Recognition<br/>PP-OCRv5_server_det &nbsp;+&nbsp;<br/>eslav_PP-OCRv5_mobile_rec<br/><i>line detection then cyrillic+latin recognition</i>] --> F
+    F[5\. Table Recognition<br/>SLANet_plus &nbsp;+&nbsp;<br/>RT-DETR-L_wired_table_cell_det<br/><i>HTML table reconstruction with cell-bbox detection</i>] --> G
+    G[6\. Chart Recognition<br/><i>optional, off by default</i>] --> H
+    H[Markdown output<br/><i>canonical; TXT / DOCX generated lazily</i>]
 ```
 
 `lang=ru` выбирает кириллическую модель распознавания (`eslav_PP-OCRv5_mobile_rec`), которая приемлемо справляется со смешанными кирилло-латинскими документами.
@@ -163,14 +150,35 @@ npm run dev               # http://localhost:5173 (проксирует /api →
 uvicorn app.main:app --port 8100
 ```
 
-**Docker:**
+## Контейнерное развёртывание и требования к GPU
+
+Рекомендуемый способ запуска — **Docker-контейнер с прокидыванием GPU**. Контейнер содержит Python 3.10, PaddlePaddle-GPU, пайплайны PaddleOCR (~3 ГБ моделей кэшируются при первом запуске) и FastAPI-сервер. Frontend-бандл собирается на этапе сборки образа.
+
+### Требования к железу
+
+- **NVIDIA GPU** с CUDA compute capability **6.0+** (поколение Pascal или новее; Volta/Turing/Ampere/Ada все подходят)
+- **VRAM: минимум 8 ГБ**, рекомендуется 12 ГБ+ для документов с большим количеством таблиц/формул (полный пайплайн держит 5 моделей в GPU-памяти)
+- **NVIDIA-драйвер ≥ 525.x** (совместимый с CUDA 12.6)
+- **NVIDIA Container Toolkit** установлен на хосте — без него `docker compose up` упадёт на этапе резервирования GPU
+
+### CPU-fallback
+
+PaddlePaddle поставляется и в CPU-сборке, но inference PPStructureV3 на CPU **в 10-30 раз медленнее** для типичных документов — не рекомендуется для продакшна. Если нужно — заменить `paddlepaddle-gpu` на `paddlepaddle` в `requirements.txt` и пересобрать.
+
+### Постоянное хранение
+
+`docker-compose.yml` монтирует `./data/` как bind-volume. SQLite-база (`data/data.db`), исходники документов, результаты OCR и preview-кэш (`data/docs/<doc_id>/`) переживают `docker compose down` и пересборку образа.
+
+### Запуск
 
 ```bash
-mkdir -p data
+mkdir -p data       # чтобы Docker не создал директорию с root-владельцем
 docker compose up --build
 ```
 
-Требует NVIDIA Container Toolkit для работы с GPU.
+Первый запуск скачивает ~3 ГБ весов моделей PaddleOCR с `paddleocr.bj.bcebos.com` в пользовательский кэш контейнера (примонтированный к хосту); последующие запуски мгновенные.
+
+Открыть `http://localhost:8100`.
 
 ## API
 

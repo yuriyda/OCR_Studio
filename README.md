@@ -8,6 +8,7 @@ Self-hosted document OCR web service powered by PaddleOCR PPStructureV3 — proj
 
 ## Features
 
+- **Containerized deployment** with GPU passthrough — `docker compose up` ships everything (Python, PaddlePaddle-GPU, models, FastAPI, frontend bundle)
 - Recognize PDF + images (PNG, JPG, BMP, TIFF, WEBP) with **tables**, **formulas**, **layout structure**
 - Organize documents into projects (CRUD, drag-and-drop between projects, batch ZIP download)
 - **Real per-page + per-stage OCR progress** ("page 5/38: text recognition") — not faked
@@ -21,30 +22,16 @@ Self-hosted document OCR web service powered by PaddleOCR PPStructureV3 — proj
 
 OCR Studio uses **PaddleOCR PPStructureV3** for document understanding. The pipeline runs 6 stages per page:
 
-```
-PDF/Image
-    │
-    ▼
-┌──────────────────────────────────────────────────────────────────┐
-│ 1. Layout Detection         PicoDet-S_layout_3cls                │
-│    Identifies blocks (text / table / formula / image / chart)    │
-│                                                                    │
-│ 2. Region Detection         PP-DocBlockLayout                    │
-│    Optional secondary structural pass                            │
-│                                                                    │
-│ 3. Formula Recognition      PP-FormulaNet_plus-L                 │
-│    LaTeX extraction from math regions                            │
-│                                                                    │
-│ 4. Text Recognition         PP-OCRv5_server_det                  │
-│                              + eslav_PP-OCRv5_mobile_rec          │
-│    Detects text lines, then recognizes (cyrillic + latin model). │
-│                                                                    │
-│ 5. Table Recognition        SLANet_plus + RT-DETR-L              │
-│                              _wired_table_cell_det               │
-│    HTML table reconstruction with cell-bbox detection.           │
-│                                                                    │
-│ 6. Chart Recognition        (optional, not enabled by default)   │
-└──────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    A[PDF / Image input] --> B
+    B[1\. Layout Detection<br/>PicoDet-S_layout_3cls<br/><i>blocks: text / table / formula / image / chart</i>] --> C
+    C[2\. Region Detection<br/>PP-DocBlockLayout<br/><i>secondary structural pass</i>] --> D
+    D[3\. Formula Recognition<br/>PP-FormulaNet_plus-L<br/><i>LaTeX from math regions</i>] --> E
+    E[4\. Text Recognition<br/>PP-OCRv5_server_det &nbsp;+&nbsp;<br/>eslav_PP-OCRv5_mobile_rec<br/><i>line detection then cyrillic+latin recognition</i>] --> F
+    F[5\. Table Recognition<br/>SLANet_plus &nbsp;+&nbsp;<br/>RT-DETR-L_wired_table_cell_det<br/><i>HTML table reconstruction with cell-bbox detection</i>] --> G
+    G[6\. Chart Recognition<br/><i>optional, off by default</i>] --> H
+    H[Markdown output<br/><i>canonical; TXT / DOCX generated lazily</i>]
 ```
 
 `lang=ru` selects the cyrillic recognition model (`eslav_PP-OCRv5_mobile_rec`) which handles mixed Cyrillic + Latin documents acceptably.
@@ -163,14 +150,35 @@ npm run dev               # http://localhost:5173 (proxies /api → 8100)
 uvicorn app.main:app --port 8100
 ```
 
-**Docker:**
+## Container deployment & GPU requirements
+
+The recommended deployment is a **Docker container with GPU passthrough**. The container bundles Python 3.10, PaddlePaddle-GPU, PaddleOCR pipelines (~3 GB models cached on first start) and the FastAPI server. Frontend bundle is built at image build time.
+
+### Hardware requirements
+
+- **NVIDIA GPU** with CUDA compute capability **6.0+** (Pascal generation or newer; Volta/Turing/Ampere/Ada all supported)
+- **VRAM: 8 GB minimum**, 12 GB+ recommended for documents with many tables/formulas (full pipeline keeps 5 models resident in GPU memory)
+- **NVIDIA driver ≥ 525.x** (compatible with CUDA 12.6)
+- **NVIDIA Container Toolkit** installed on the host — required for `docker compose` to expose the GPU; without it `docker compose up` fails on the GPU reservation step
+
+### CPU-only fallback
+
+PaddlePaddle ships a CPU build, but PPStructureV3 inference on CPU is **10-30× slower** for typical documents — not recommended for production use. Replace `paddlepaddle-gpu` with `paddlepaddle` in `requirements.txt` and rebuild if you need this.
+
+### Persistent data
+
+`docker-compose.yml` mounts `./data/` as a bind-volume. SQLite DB (`data/data.db`), uploaded originals, OCR results and preview cache (`data/docs/<doc_id>/`) survive `docker compose down` / image rebuilds.
+
+### Run
 
 ```bash
-mkdir -p data
+mkdir -p data       # avoid root-owned dir if it doesn't exist yet
 docker compose up --build
 ```
 
-Requires NVIDIA Container Toolkit for GPU.
+The first start downloads ~3 GB of PaddleOCR model weights from `paddleocr.bj.bcebos.com` into the container's user cache (mapped to host); subsequent starts are instant.
+
+Open `http://localhost:8100`.
 
 ## API
 
