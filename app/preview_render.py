@@ -116,3 +116,12 @@ def render_page(data_dir: Path, doc_id: str, page_num: int) -> Path:
         out.write_bytes(buf.getvalue())
 
     return out
+
+
+def get_progress(doc_id: str) -> dict | None:
+    """Текущий прогресс batch-рендера миниатюр или None если не идёт.
+
+    Заглушка для Task 4 (preview info endpoint). Реальная имплементация
+    с in-memory _preview_progress dict добавляется в Task 19.
+    """
+    return None

@@ -612,9 +612,10 @@ async def get_rendered(doc_id: str, format: str = "md"):
         conn.close()
 
 
-@app.get("/api/preview/{doc_id}")
-async def preview_pages(doc_id: str):
-    import base64
+@app.get("/api/preview/{doc_id}/info")
+async def preview_info(doc_id: str):
+    """Метаданные превью без рендера. Дёшево — читает только page_count из PyMuPDF."""
+    from . import preview_render
     conn = _conn()
     try:
         doc = DocumentRepo(conn).get(doc_id)
@@ -623,25 +624,59 @@ async def preview_pages(doc_id: str):
         original = files.original_path(DATA_DIR, doc_id)
         if not original or not original.exists():
             raise HTTPException(404, "Original missing")
-        pages = []
-        # DPI/size повышен для Source pane (Task 12+22): браузер downscale через CSS,
-        # для thumbnail-баров — норм; для крупного просмотра — нужно sharp.
-        if original.suffix.lower() == ".pdf":
+        kind = "pdf" if original.suffix.lower() == ".pdf" else "image"
+        if kind == "pdf":
             import fitz
-            d = fitz.open(str(original))
-            for page in d:
-                pix = page.get_pixmap(dpi=200)
-                pages.append(base64.b64encode(pix.tobytes("jpeg", 80)).decode())
-            d.close()
+            with fitz.open(str(original)) as pdf:
+                count = pdf.page_count
         else:
-            from PIL import Image
-            import io as _io
-            img = Image.open(original)
-            img.thumbnail((1600, 1600))
-            buf = _io.BytesIO()
-            img.save(buf, format="JPEG", quality=80)
-            pages.append(base64.b64encode(buf.getvalue()).decode())
+            count = 1
+        progress = preview_render.get_progress(doc_id)
+        return {"count": count, "kind": kind, "thumbs_progress": progress}
+    finally:
+        conn.close()
+
+
+@app.get("/api/preview/{doc_id}/thumbs")
+async def preview_thumbs(doc_id: str):
+    """Все миниатюры как base64-JSON (компактные DPI=80)."""
+    import base64
+    from . import preview_render
+    conn = _conn()
+    try:
+        doc = DocumentRepo(conn).get(doc_id)
+        if not doc:
+            raise HTTPException(404, "Document not found")
+        try:
+            paths = preview_render.render_thumbs(DATA_DIR, doc_id)
+        except FileNotFoundError:
+            raise HTTPException(404, "Original missing")
+        pages = [base64.b64encode(p.read_bytes()).decode() for p in paths]
         return {"pages": pages}
+    finally:
+        conn.close()
+
+
+@app.get("/api/preview/{doc_id}/page/{page_num}")
+async def preview_page(doc_id: str, page_num: int):
+    """Full-разрешение страница как JPEG-bytes."""
+    from . import preview_render
+    conn = _conn()
+    try:
+        doc = DocumentRepo(conn).get(doc_id)
+        if not doc:
+            raise HTTPException(404, "Document not found")
+        try:
+            path = preview_render.render_page(DATA_DIR, doc_id, page_num)
+        except FileNotFoundError:
+            raise HTTPException(404, "Original missing")
+        except ValueError as e:
+            raise HTTPException(404, str(e))
+        return FileResponse(
+            str(path),
+            media_type="image/jpeg",
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
     finally:
         conn.close()
 

@@ -531,38 +531,6 @@ def test_source_endpoint_404_for_missing_doc(client):
     assert r.status_code == 404
 
 
-def test_preview_pdf_uses_higher_dpi(client, tmp_data_dir):
-    """Preview PDF страниц должен идти в 200 DPI (sharper для Source pane)."""
-    import fitz
-    import base64
-
-    # Создаём минимальный PDF (US Letter ~ 612x792 pt)
-    pdf_doc = fitz.open()
-    page = pdf_doc.new_page(width=612, height=792)
-    page.insert_text((72, 100), "Test")
-    pdf_path = tmp_data_dir / "test.pdf"
-    pdf_doc.save(str(pdf_path))
-    pdf_doc.close()
-
-    with open(pdf_path, "rb") as f:
-        files_arg = [("files", ("test.pdf", io.BytesIO(f.read()), "application/pdf"))]
-    r = client.post("/api/ocr", files=files_arg, data={"format": "md", "lang": "ru"})
-    doc_id = r.json()["ids"][0]
-
-    r2 = client.get(f"/api/preview/{doc_id}")
-    assert r2.status_code == 200
-    pages = r2.json()["pages"]
-    assert len(pages) == 1
-
-    # При 200 DPI letter page (8.5") даёт ширину ~1700 px (8.5 * 200 = 1700).
-    # При 120 DPI было ~1020 px. Проверяем что bump применён.
-    img_bytes = base64.b64decode(pages[0])
-    from PIL import Image
-    import io as _io
-    img = Image.open(_io.BytesIO(img_bytes))
-    assert img.width >= 1500, f"expected width >=1500 (200 DPI), got {img.width}"
-
-
 def test_system_engine_lang_is_fixed_ru(client):
     """engine_lang всегда 'ru' независимо от состояния _engine (Task 2 fix)."""
     r = client.get("/api/system")
@@ -868,3 +836,95 @@ def test_upload_creates_doc_with_md_format_regardless_of_request(client):
     docs = client.get("/api/status").json()
     target = next(d for d in docs if d["id"] == doc_id)
     assert target["format"] == "md"
+
+
+# ---------------------------------------------------------------------------
+# Task 4: preview info/thumbs/page endpoints
+# ---------------------------------------------------------------------------
+
+def _make_doc(client, tmp_data_dir, filename):
+    """Создаёт проект + документ с placeholder original-файлом. Возвращает (pid, did)."""
+    from app import storage, db, files as files_mod
+    conn = db.get_connection(tmp_data_dir / "data.db")
+    pr = storage.ProjectRepo(conn)
+    pr.ensure_inbox()
+    doc_repo = storage.DocumentRepo(conn)
+    import uuid
+    did = uuid.uuid4().hex[:12]
+    files_mod.save_original(tmp_data_dir, did, b"placeholder", filename)
+    doc_repo.create(doc_id=did, project_id=1, filename=filename,
+                    format="md", lang="ru", size_bytes=11)
+    conn.close()
+    return 1, did
+
+
+def test_preview_info_returns_count_and_kind_for_pdf(client, tmp_data_dir):
+    import fitz
+    from app import files as files_mod
+
+    pid, did = _make_doc(client, tmp_data_dir, "x.pdf")
+    pdf = fitz.open()
+    pdf.new_page(width=200, height=200)
+    pdf.new_page(width=200, height=200)
+    pdf.save(str(files_mod.original_path(tmp_data_dir, did)))
+    pdf.close()
+
+    r = client.get(f"/api/preview/{did}/info")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["count"] == 2
+    assert body["kind"] == "pdf"
+    assert body["thumbs_progress"] is None
+
+
+def test_preview_thumbs_returns_base64_pages(client, tmp_data_dir):
+    import fitz
+    from app import files as files_mod
+    pid, did = _make_doc(client, tmp_data_dir, "x.pdf")
+    pdf = fitz.open()
+    pdf.new_page()
+    pdf.new_page()
+    pdf.save(str(files_mod.original_path(tmp_data_dir, did)))
+    pdf.close()
+
+    r = client.get(f"/api/preview/{did}/thumbs")
+    assert r.status_code == 200
+    pages = r.json()["pages"]
+    assert len(pages) == 2
+    import base64
+    base64.b64decode(pages[0])  # should not raise
+
+
+def test_preview_page_returns_jpeg_bytes(client, tmp_data_dir):
+    import fitz
+    from app import files as files_mod
+    pid, did = _make_doc(client, tmp_data_dir, "x.pdf")
+    pdf = fitz.open()
+    pdf.new_page()
+    pdf.new_page()
+    pdf.save(str(files_mod.original_path(tmp_data_dir, did)))
+    pdf.close()
+
+    r = client.get(f"/api/preview/{did}/page/2")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("image/jpeg")
+    # JPEG magic bytes
+    assert r.content[:3] == b"\xff\xd8\xff"
+
+
+def test_preview_page_404_on_invalid_page(client, tmp_data_dir):
+    import fitz
+    from app import files as files_mod
+    pid, did = _make_doc(client, tmp_data_dir, "x.pdf")
+    pdf = fitz.open()
+    pdf.new_page()  # 1-page PDF
+    pdf.save(str(files_mod.original_path(tmp_data_dir, did)))
+    pdf.close()
+
+    r = client.get(f"/api/preview/{did}/page/99")
+    assert r.status_code == 404
+
+
+def test_preview_info_404_for_missing_doc(client):
+    r = client.get("/api/preview/nonexistent/info")
+    assert r.status_code == 404
