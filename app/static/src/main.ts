@@ -219,11 +219,20 @@ function bindUI(): void {
   });
 
   $('proj-list').addEventListener('dragover', (e) => {
-    if ((e.target as HTMLElement).closest('.project-item')) e.preventDefault();
+    const item = (e.target as HTMLElement).closest<HTMLElement>('.project-item');
+    if (item) {
+      e.preventDefault();
+      item.classList.add('drag-over');
+    }
+  });
+  $('proj-list').addEventListener('dragleave', (e) => {
+    const item = (e.target as HTMLElement).closest<HTMLElement>('.project-item');
+    if (item) item.classList.remove('drag-over');
   });
   $('proj-list').addEventListener('drop', (e) => {
     const item = (e.target as HTMLElement).closest<HTMLElement>('.project-item');
     if (!item) return;
+    item.classList.remove('drag-over');
     const projId = Number(item.dataset.id);
     handleDrop(e as DragEvent, projId, {
       onUpload: (files, pid) => { const ok = checkSize(files); if (ok.length) uploadFiles(ok, pid); },

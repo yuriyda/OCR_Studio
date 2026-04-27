@@ -46,6 +46,9 @@
   .doc-item.active {
     @apply bg-gradient-to-r from-accent/20 to-transparent border-l-2 border-accent;
   }
+  .project-item.drag-over {
+    @apply bg-accent/15 ring-2 ring-accent;
+  }
   .modal-overlay {
     @apply fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50;
     animation: fade-in 0.15s;
