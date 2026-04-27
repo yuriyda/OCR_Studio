@@ -76,7 +76,30 @@ def _walk_block(doc, node):
             para = doc.add_paragraph(style=style_name)
             _walk_inline(para, li)
         return
-    # Other block tags handled in later tasks 9-11.
+    if name == "pre":
+        # Markdown fenced ```code``` → <pre><code>...</code></pre>
+        text = node.get_text("\n")  # preserve newlines from <code> children
+        para = doc.add_paragraph()
+        run = para.add_run(text)
+        run.font.name = "Courier New"
+        return
+    if name == "blockquote":
+        for sub in node.children:
+            if isinstance(sub, NavigableString):
+                t = str(sub).strip()
+                if t:
+                    doc.add_paragraph(t, style="Intense Quote")
+                continue
+            sub_name = (sub.name or "").lower()
+            if sub_name == "p":
+                p = doc.add_paragraph(style="Intense Quote")
+                _walk_inline(p, sub)
+        return
+    if name == "hr":
+        # Visual separator — empty paragraph; python-docx не имеет dedicated horizontal rule.
+        doc.add_paragraph("")
+        return
+    # Other block tags handled in later tasks.
 
 
 def _walk_inline(para, node):

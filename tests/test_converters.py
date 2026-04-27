@@ -113,3 +113,29 @@ def test_html_to_docx_link_renders_text_and_url():
     text = p.text
     assert "site" in text
     assert "https://example.com" in text  # URL appears (in parens or as raw)
+
+
+def test_html_to_docx_code_block():
+    html = "<pre><code>line1\nline2\nline3</code></pre>"
+    data = html_to_docx(html)
+    doc = _open_docx(data)
+    code_paras = [p for p in doc.paragraphs if any(r.font.name == "Courier New" for r in p.runs)]
+    assert code_paras, "no code paragraph"
+    assert "line1" in code_paras[0].text
+    assert "line3" in code_paras[0].text
+
+
+def test_html_to_docx_blockquote():
+    data = html_to_docx("<blockquote><p>quoted text</p></blockquote>")
+    doc = _open_docx(data)
+    quotes = [p for p in doc.paragraphs if p.style.name in ("Intense Quote", "Quote")]
+    assert quotes and "quoted text" in quotes[0].text
+
+
+def test_html_to_docx_hr_creates_separator_paragraph():
+    data = html_to_docx("<p>before</p><hr/><p>after</p>")
+    doc = _open_docx(data)
+    paras = [p.text for p in doc.paragraphs]
+    assert "before" in paras
+    assert "after" in paras
+    assert paras.index("before") < paras.index("after")
