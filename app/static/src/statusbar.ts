@@ -11,11 +11,16 @@
 
 import { t } from './i18n';
 import { formatBytes } from './icons';
-import type { LangCode } from './types';
+import type { LangCode, PipelineModel } from './types';
 
 export interface StatusBarData {
   env: { gpu: string | null; cuda: string | null; vram_gb: number | null };
-  engine: { name: string; lang: LangCode | null; status: 'ready' | 'loading' | 'idle' };
+  engine: {
+    name: string;
+    lang: LangCode | null;
+    status: 'ready' | 'loading' | 'idle';
+    pipeline: PipelineModel[];
+  };
   project: { name: string; doc_count: number; total_bytes: number; processing: number; queued: number } | null;
 }
 
@@ -38,9 +43,10 @@ export function renderStatusBar(container: HTMLElement, data: StatusBarData): vo
     : '';
   const lang = data.engine.lang ?? '—';
 
+  const tooltip = data.engine.pipeline.map(m => `${m.role}: ${m.name}`).join('\n');
   container.innerHTML = `
     <div class="flex items-center gap-4 text-xs text-text-muted px-3 py-1 bg-surface border-t border-border">
-      <span>${engineLabel} · ${escHtml(lang)}</span>
+      <span data-engine title="${escHtml(tooltip)}">${engineLabel} · ${escHtml(lang)}</span>
       <span>${escHtml(env)}</span>
       <span>${cuda}</span>
       <span class="ml-auto">${escHtml(proj)}</span>

@@ -21,6 +21,17 @@ logger = logging.getLogger(__name__)
 
 _engine: PPStructureV3 | None = None
 
+# Список ключевых моделей PPStructureV3 pipeline. Используется в /api/system и
+# stage_label («Загрузка моделей: ...»). Имена соответствуют каталогам в
+# /home/node/.paddlex/official_models/. Меняется только при апгрейде PaddleOCR.
+PIPELINE_MODELS: list[dict] = [
+    {"role": "layout",   "name": "PicoDet-S_layout_3cls"},
+    {"role": "text_det", "name": "PP-OCRv5_server_det"},
+    {"role": "text_rec", "name": "cyrillic_PP-OCRv3"},
+    {"role": "table",    "name": "SLANet_plus + RT-DETR-L_wired_table_cell_det"},
+    {"role": "formula",  "name": "PP-FormulaNet_plus-L"},
+]
+
 
 def get_engine() -> PPStructureV3:
     """Return (and lazily initialize) the shared PPStructureV3 engine.

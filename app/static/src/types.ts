@@ -52,6 +52,11 @@ export interface Document {
   stage_label: string | null;
 }
 
+export interface PipelineModel {
+  role: string;
+  name: string;
+}
+
 export interface SystemInfo {
   gpu: string | null;
   cuda: string | null;
@@ -59,6 +64,7 @@ export interface SystemInfo {
   engine_lang: LangCode | null;
   /** Бэкенд возвращает только 'loading' | 'ready'. 'idle' — frontend-only initial cache. */
   engine_status: 'ready' | 'loading' | 'idle';
+  engine_pipeline: PipelineModel[];
 }
 
 export interface ApiLimits {

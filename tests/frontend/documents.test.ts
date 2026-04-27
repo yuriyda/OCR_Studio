@@ -100,4 +100,20 @@ describe('renderDocuments', () => {
     const sorted = applySort(docs, 'created', 'desc');
     expect(sorted[0]?.id).toBe('d4');
   });
+
+  it('renders stage_label when document is processing with engine_loading stage', () => {
+    const container = document.createElement('div');
+    const docs2: Document[] = [{
+      id: 'd1', project_id: 1, filename: 'x.pdf', size_bytes: 100,
+      format: 'md', lang: 'ru', status: 'processing',
+      created_at: 'x', started_at: null, finished_at: null,
+      page_count: null, current_page: null, progress_percent: null,
+      elapsed_seconds: null, eta_seconds: null,
+      error: null, available_formats: [],
+      stage: 'engine_loading',
+      stage_label: 'Загрузка моделей PaddleOCR: layout, text, table, formula',
+    }];
+    renderDocuments(container, docs2, null);
+    expect(container.textContent).toContain('layout');
+  });
 });

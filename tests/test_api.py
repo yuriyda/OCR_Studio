@@ -1011,3 +1011,53 @@ def test_worker_sets_engine_loading_stage_when_engine_not_ready(tmp_data_dir):
             asyncio.run(_run_one())
 
     assert "engine_loading" in stages_seen, f"engine_loading stage not set; saw: {stages_seen}"
+
+
+# ---------------------------------------------------------------------------
+# Task 18 (extended): stage_label includes pipeline model names
+# ---------------------------------------------------------------------------
+
+def test_doc_response_engine_loading_label_includes_models(client, tmp_data_dir):
+    """stage_label для engine_loading включает упоминание моделей pipeline."""
+    from app import storage, db
+    pid, did = _make_doc(client, tmp_data_dir, "x.pdf")
+    conn = db.get_connection(tmp_data_dir / "data.db")
+    try:
+        storage.DocumentRepo(conn).update(did, status="processing", stage="engine_loading")
+    finally:
+        conn.close()
+    r = client.get(f"/api/status?project_id={pid}")
+    rows = r.json()
+    target = [d for d in rows if d["id"] == did][0]
+    assert "layout" in target["stage_label"]
+    assert "text" in target["stage_label"]
+    assert "table" in target["stage_label"]
+
+
+def test_doc_response_ocr_label_includes_pipeline_name(client, tmp_data_dir):
+    """stage_label для ocr включает имя pipeline."""
+    from app import storage, db
+    pid, did = _make_doc(client, tmp_data_dir, "x.pdf")
+    conn = db.get_connection(tmp_data_dir / "data.db")
+    try:
+        storage.DocumentRepo(conn).update(
+            did, status="processing", stage="ocr",
+            current_page=2, page_count=5,
+        )
+    finally:
+        conn.close()
+    r = client.get(f"/api/status?project_id={pid}")
+    rows = r.json()
+    target = [d for d in rows if d["id"] == did][0]
+    assert "PPStructureV3" in target["stage_label"]
+    assert "2/5" in target["stage_label"]
+
+
+def test_system_info_includes_pipeline_models(client):
+    r = client.get("/api/system")
+    body = r.json()
+    assert "engine_pipeline" in body
+    assert isinstance(body["engine_pipeline"], list)
+    assert len(body["engine_pipeline"]) >= 4  # layout, text_det, text_rec, table, formula
+    roles = {m["role"] for m in body["engine_pipeline"]}
+    assert {"layout", "text_rec", "table", "formula"}.issubset(roles)

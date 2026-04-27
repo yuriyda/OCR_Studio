@@ -42,8 +42,13 @@ def _query_nvidia_smi() -> dict:
         return {"gpu": None, "cuda": None, "vram_gb": None}
 
 
-def get_system_info(engine_status: str, engine_lang: Optional[str]) -> dict:
+def get_system_info(
+    engine_status: str,
+    engine_lang: Optional[str],
+    engine_pipeline: list[dict] | None = None,
+) -> dict:
     info = _query_nvidia_smi()
     info["engine_status"] = engine_status
     info["engine_lang"] = engine_lang
+    info["engine_pipeline"] = engine_pipeline or []
     return info

@@ -326,9 +326,9 @@ def _doc_response(d: dict) -> dict:
     stage = d.get("stage")
     stage_label = None
     if stage == "engine_loading":
-        stage_label = "Загрузка моделей PaddleOCR…"
+        stage_label = "Загрузка моделей PaddleOCR: layout, text, table, formula"
     elif stage == "ocr" and d.get("current_page") and d.get("page_count"):
-        stage_label = f"OCR страница {d['current_page']}/{d['page_count']}"
+        stage_label = f"PPStructureV3 (cyrillic) — страница {d['current_page']}/{d['page_count']}"
     return {
         "id": d["id"],
         "filename": d["filename"],
@@ -570,12 +570,16 @@ async def delete_document(doc_id: str):
 
 @app.get("/api/system")
 async def system_info():
-    from .ocr_engine import _engine
+    from .ocr_engine import _engine, PIPELINE_MODELS
     if _engine is None:
         status = "loading"
     else:
         status = "ready"
-    return sys_info.get_system_info(engine_status=status, engine_lang="ru")
+    return sys_info.get_system_info(
+        engine_status=status,
+        engine_lang="ru",
+        engine_pipeline=PIPELINE_MODELS,
+    )
 
 
 @app.get("/api/limits")

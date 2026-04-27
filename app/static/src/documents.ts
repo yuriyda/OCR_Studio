@@ -38,8 +38,10 @@ function progressMarkup(d: Document): string {
   const cur = d.current_page ?? 0;
   const tot = d.page_count ?? 0;
   const pct = Math.max(0, Math.min(100, d.progress_percent ?? 0));
-  const counter = tot
-    ? `<span class="text-xs text-text-muted">${cur}/${tot}</span>`
+  // stage_label от бэкенда имеет приоритет над счётчиком страниц
+  const label = d.stage_label ?? (tot ? `${cur}/${tot}` : '');
+  const counter = label
+    ? `<span class="text-xs text-text-muted">${escHtml(label)}</span>`
     : '';
   return `
     ${counter}

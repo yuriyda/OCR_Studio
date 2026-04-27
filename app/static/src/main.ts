@@ -35,7 +35,7 @@ let docsCache: Document[] = [];
 let selectedDocId: string | null = null;
 let resultTab: ResultTabKey = 'markdown';
 let selectedPageIdx = 0;
-let envCache: SystemInfo = { gpu: null, cuda: null, vram_gb: null, engine_lang: null, engine_status: 'idle' };
+let envCache: SystemInfo = { gpu: null, cuda: null, vram_gb: null, engine_lang: null, engine_status: 'idle', engine_pipeline: [] };
 let limitsCache: ApiLimits = { max_file_size_bytes: 50 * 1024 * 1024, allowed_extensions: [] };
 const previewPagesCache = new Map<string, string[]>();
 
@@ -78,7 +78,7 @@ function refreshStatusBar(): void {
   const queued = docsCache.filter(d => d.status === 'queued').length;
   renderStatusBar($('statusbar'), {
     env: { gpu: envCache.gpu, cuda: envCache.cuda, vram_gb: envCache.vram_gb },
-    engine: { name: 'PPStructureV3', lang: envCache.engine_lang, status: envCache.engine_status },
+    engine: { name: 'PPStructureV3', lang: envCache.engine_lang, status: envCache.engine_status, pipeline: envCache.engine_pipeline },
     project: proj ? { name: proj.name, doc_count: proj.doc_count, total_bytes: proj.total_bytes, processing, queued } : null,
   });
 }
