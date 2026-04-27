@@ -190,6 +190,12 @@ async function uploadFiles(filesList: File[], pid: number): Promise<void> {
     }
     await refreshProjects();
     await refreshDocuments();
+    // Auto-select первый загруженный — чтобы PDF-превью появилось сразу,
+    // не дожидаясь клика по документу. Это снимает UX-впечатление «ничего не происходит».
+    if (resp.ids.length > 0) {
+      const firstId = resp.ids[0];
+      if (firstId) await selectDocument(firstId);
+    }
     // После upload — гарантированно живой polling (мог быть остановлен shouldStop ранее).
     // Иначе queued doc будет «висеть» в UI без обновлений до клика «Распознать».
     if (docsCache.some(d => d.status === 'queued' || d.status === 'processing')) {
@@ -353,6 +359,15 @@ function handleProjectMenu(id: number): void {
         try {
           await api.deleteProject(id);
           if (state.activeProjectId === id) state.setActiveProject(INBOX_ID);
+          // Selected документ мог принадлежать удалённому проекту → каскадно удалён.
+          // Чистим панели, иначе превью «висит».
+          if (selectedDocId !== null) {
+            previewPagesCache.delete(selectedDocId);
+            selectedDocId = null;
+            rerenderSource();
+            renderResultTabs();
+            await rerenderResult();
+          }
           await refreshProjects(); await refreshDocuments();
         } catch (e) {
           if (e instanceof ApiError && e.status === 409) toast.show(t('toast.processing_required'), 'error');
@@ -380,7 +395,15 @@ function handleDocMenu(docId: string): void {
       if (!ok) return;
       try {
         await api.deleteDocument(docId);
-        if (selectedDocId === docId) selectedDocId = null;
+        // Чистим preview-кэш и панели — иначе после удаления превью «висит» в Source/Result,
+        // пока пользователь не кликнет другой документ.
+        previewPagesCache.delete(docId);
+        if (selectedDocId === docId) {
+          selectedDocId = null;
+          rerenderSource();
+          renderResultTabs();
+          await rerenderResult();
+        }
         await refreshDocuments();
       } catch (e) {
         if (e instanceof ApiError && e.status === 409) toast.show(t('toast.processing_required'), 'error');
