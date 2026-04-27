@@ -213,10 +213,41 @@ async function rerenderResult(): Promise<void> {
 const polling = new Polling(async (pid) => {
   try {
     const docs = await api.listDocuments(pid, state.sortMode.sort, state.sortMode.order);
+    const prevSelected = selectedDocId !== null
+      ? docsCache.find(d => d.id === selectedDocId)
+      : null;
     docsCache = applySort(docs, state.sortMode.sort, state.sortMode.order);
+    const newSelected = selectedDocId !== null
+      ? docsCache.find(d => d.id === selectedDocId)
+      : null;
+
     renderDocuments($('doc-list'), docsCache, selectedDocId);
     refreshStatusBar();
     refreshRecognizeButton();
+
+    // Если selected документ изменил статус (queued/processing → done/error)
+    // или у него прибавились available_formats — Result pane показывает
+    // устаревший «preview.unavailable». Дёргаем переключение таба и rerender,
+    // иначе пользователь видит «недоступно» пока сам не кликнет.
+    if (selectedDocId !== null && newSelected) {
+      const statusChanged = prevSelected?.status !== newSelected.status;
+      const formatsChanged =
+        (prevSelected?.available_formats?.length ?? 0) !== newSelected.available_formats.length;
+      if (statusChanged || formatsChanged) {
+        if (newSelected.status === 'done') {
+          const tabs = allResultTabs();
+          if (isTabAvailable('markdown', newSelected.available_formats)) {
+            resultTab = 'markdown';
+          } else {
+            const firstAvailable = tabs.find(tab => isTabAvailable(tab.key, newSelected.available_formats));
+            if (firstAvailable) resultTab = firstAvailable.key;
+          }
+        }
+        renderResultTabs();
+        await rerenderResult();
+      }
+    }
+
     if (docs.some(d => d.status === 'processing')) polling.enableFast();
     else polling.disableFast();
     if (polling.shouldStop(docs)) polling.stop();
