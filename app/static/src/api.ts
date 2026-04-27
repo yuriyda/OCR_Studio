@@ -15,7 +15,7 @@
 
 import type {
   Project, Document, SystemInfo, ApiLimits, UploadResponse,
-  RecognizeResponse, PreviewData, OcrFormat,
+  RecognizeResponse, PreviewInfo, PreviewThumbs, OcrFormat,
 } from './types';
 
 export class ApiError extends Error {
@@ -99,8 +99,14 @@ export const api = {
   async getRendered(docId: string, format: 'md' | 'docx' = 'md'): Promise<string> {
     return _text(await fetch(`/api/rendered/${docId}?format=${format}`));
   },
-  async getPreview(docId: string): Promise<PreviewData> {
-    return _json(await fetch(`/api/preview/${docId}`));
+  async getPreviewInfo(docId: string): Promise<PreviewInfo> {
+    return _json(await fetch(`/api/preview/${docId}/info`));
+  },
+  async getPreviewThumbs(docId: string): Promise<PreviewThumbs> {
+    return _json(await fetch(`/api/preview/${docId}/thumbs`));
+  },
+  previewPageUrl(docId: string, pageNum: number): string {
+    return `/api/preview/${docId}/page/${pageNum}`;
   },
   async getSystemInfo(): Promise<SystemInfo> {
     return _json(await fetch('/api/system'));

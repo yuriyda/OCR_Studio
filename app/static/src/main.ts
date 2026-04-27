@@ -105,7 +105,7 @@ function refreshRecognizeButton(): void {
 async function loadPagePreviews(docId: string): Promise<void> {
   if (previewPagesCache.has(docId)) return;
   try {
-    const data = await api.getPreview(docId);
+    const data = await api.getPreviewThumbs(docId);
     previewPagesCache.set(docId, data.pages);
   } catch { /* ignore */ }
 }

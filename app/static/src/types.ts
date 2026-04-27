@@ -84,7 +84,13 @@ export interface PreloadResponse {
   status: 'loading' | 'ready';
 }
 
-export interface PreviewData {
-  /** Base64-encoded JPEG bytes (не data: URL — добавить префикс на стороне consumer). */
+export interface PreviewInfo {
+  count: number;
+  kind: 'pdf' | 'image';
+  thumbs_progress: { current: number; total: number } | null;
+}
+
+export interface PreviewThumbs {
+  /** Base64-encoded JPEG bytes (без data: prefix). */
   pages: string[];
 }

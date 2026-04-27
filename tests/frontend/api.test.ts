@@ -152,10 +152,22 @@ describe('api client', () => {
     expect(f).toHaveBeenCalledWith('/api/rendered/a1?format=docx');
   });
 
-  it('getPreview returns pages array', async () => {
-    (globalThis as any).fetch = mockFetch({ pages: ['BASE64'] });
-    const r = await api.getPreview('a1');
-    expect(r.pages).toEqual(['BASE64']);
+  it('getPreviewInfo returns count and kind', async () => {
+    (globalThis as any).fetch = mockFetch({ count: 5, kind: 'pdf', thumbs_progress: null });
+    const r = await api.getPreviewInfo('a1');
+    expect(r.count).toBe(5);
+    expect(r.kind).toBe('pdf');
+    expect(r.thumbs_progress).toBeNull();
+  });
+
+  it('getPreviewThumbs returns base64 pages', async () => {
+    (globalThis as any).fetch = mockFetch({ pages: ['BASE64A', 'BASE64B'] });
+    const r = await api.getPreviewThumbs('a1');
+    expect(r.pages).toEqual(['BASE64A', 'BASE64B']);
+  });
+
+  it('previewPageUrl builds direct URL', () => {
+    expect(api.previewPageUrl('a1', 3)).toBe('/api/preview/a1/page/3');
   });
 
   it('getSystemInfo and getLimits work', async () => {
