@@ -153,32 +153,30 @@ def process_file(
 
     Язык зафиксирован = 'ru' (cyrillic-модель). Lang-параметр удалён — см. spec ux-cleanup §2.
 
-    progress_callback(current_page: int, total_pages: int) вызывается дважды на страницу:
-    в начале и после обработки. Это даёт UI polling (~2 сек) больше шансов поймать
-    обновление прогресса даже при коротких страницах.
+    Streaming: итерируем engine.predict() как ленивый generator, не материализуем
+    через list(). Это даёт progress_callback реальный per-page фронт.
+
+    progress_callback(current_page: int, total_pages: int) вызывается ДО и ПОСЛЕ
+    обработки каждой страницы — UI polling (~2s) ловит хотя бы одно событие на страницу.
     """
     engine = get_engine()
     path = Path(file_path)
 
-    # Pre-count pages для PDF; для image — всегда 1
     total_pages = 1
     if path.suffix.lower() == ".pdf":
         import fitz
         with fitz.open(str(file_path)) as doc:
             total_pages = doc.page_count
 
-    result = engine.predict(str(file_path))
-    pages = list(result)
-    total = max(total_pages, len(pages))
-
     md_parts = [f"# {path.stem}\n"]
-    for page_idx, page_result in enumerate(pages):
-        page_num = page_idx + 1
+    page_idx = 0
+    for page_result in engine.predict(str(file_path)):  # streaming, no list()
+        page_idx += 1
         if progress_callback is not None:
-            progress_callback(page_num, total)  # start
-        md_parts.append(page_to_markdown(page_result, page_num))
+            progress_callback(page_idx, max(total_pages, page_idx))
+        md_parts.append(page_to_markdown(page_result, page_idx))
         if progress_callback is not None:
-            progress_callback(page_num, total)  # end
+            progress_callback(page_idx, max(total_pages, page_idx))
 
     return "\n".join(md_parts)
 

@@ -120,3 +120,47 @@ def test_progress_callback_called_at_start_and_end_of_each_page(monkeypatch, tmp
     assert calls[-1][0] == 3
 
 
+def test_process_file_iterates_generator_lazily(monkeypatch, tmp_path):
+    """process_file должен итерировать engine.predict() как ленивый generator,
+    не материализуя через list() — иначе progress_callback фейковый.
+    """
+    import importlib
+    from unittest.mock import MagicMock, patch
+    from app import ocr_engine
+
+    # Build a 3-page mock generator
+    fake_pages = []
+    for i in range(3):
+        page = MagicMock()
+        page.json = {"res": {"parsing_res_list": [
+            {"block_label": "text", "block_content": f"page {i+1}", "block_bbox": [0, 0, 100, 100]}
+        ], "table_res_list": []}}
+        fake_pages.append(page)
+
+    pull_count = [0]
+    def gen():
+        for p in fake_pages:
+            pull_count[0] += 1
+            yield p
+
+    fake_engine = MagicMock()
+    fake_engine.predict.return_value = gen()
+
+    img = tmp_path / "x.png"
+    img.write_bytes(b"\x89PNG\r\n\x1a\n")
+
+    callback_calls = []
+    def cb(cur, total):
+        callback_calls.append((cur, total, pull_count[0]))
+
+    with patch.object(ocr_engine, "get_engine", return_value=fake_engine):
+        ocr_engine.process_file(str(img), progress_callback=cb)
+
+    assert callback_calls, "no callback fired"
+    first_pull_count_at_callback = callback_calls[0][2]
+    assert first_pull_count_at_callback < 3, (
+        f"callback fired only after generator was fully consumed "
+        f"(pulls={first_pull_count_at_callback}); progress is fake"
+    )
+
+
