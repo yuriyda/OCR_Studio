@@ -41,12 +41,14 @@ export function renderStatusBar(container: HTMLElement, data: StatusBarData): vo
   const proj = data.project
     ? t('statusbar.docs_total', { count: data.project.doc_count, size: formatBytes(data.project.total_bytes) })
     : '';
-  const lang = data.engine.lang ?? '—';
 
+  // engine.lang намеренно не рендерится — это OCR-движок (cyrillic), не UI-локаль.
+  // Раньше показывался как «· ru» и сбивал пользователей. Tooltip с pipeline моделями
+  // оставляем — он даёт нужную инфо при hover.
   const tooltip = data.engine.pipeline.map(m => `${m.role}: ${m.name}`).join('\n');
   container.innerHTML = `
     <div class="flex items-center gap-4 text-xs text-text-muted px-3 py-1 bg-surface border-t border-border">
-      <span data-engine title="${escHtml(tooltip)}">${engineLabel} · ${escHtml(lang)}</span>
+      <span data-engine title="${escHtml(tooltip)}">${engineLabel}</span>
       <span>${escHtml(env)}</span>
       <span>${cuda}</span>
       <span class="ml-auto">${escHtml(proj)}</span>

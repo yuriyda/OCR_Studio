@@ -17,7 +17,9 @@ describe('renderStatusBar', () => {
     expect(sb.textContent).toContain('5');
     expect(sb.textContent).toContain('12.0 МБ');
     expect(sb.textContent).toContain('готов');
-    expect(sb.textContent).toContain('ru');
+    // engine.lang («· ru») намеренно скрыт — это OCR-движок, не UI-локаль.
+    // Проверяем что НЕ появляется как отдельный токен после статуса.
+    expect(sb.textContent).not.toMatch(/готов\s*·\s*ru/);
   });
 
   it('shows engine loading state', () => {
@@ -30,14 +32,16 @@ describe('renderStatusBar', () => {
     expect(sb.textContent).toContain('загрузка');
   });
 
-  it('renders engine lang dash when null', () => {
+  it('does not render engine.lang anywhere (hidden by design)', () => {
     const sb = document.getElementById('sb')!;
     renderStatusBar(sb, {
       env: { gpu: null, cuda: null, vram_gb: null },
-      engine: { name: 'PPStructureV3', lang: null, status: 'idle', pipeline: [] },
+      engine: { name: 'PPStructureV3', lang: 'ru', status: 'ready', pipeline: [] },
       project: null,
     });
-    expect(sb.textContent).toContain('—');
+    // engine.lang — это OCR-движок (cyrillic). Он не отображается в статусбаре,
+    // только в tooltip (через pipeline список моделей).
+    expect(sb.textContent).not.toContain('· ru');
   });
 
   it('hides project section when null', () => {
