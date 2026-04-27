@@ -1,14 +1,46 @@
+# Runtime data (SQLite + uploaded files + preview cache)
 data/
-node_modules/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Python
 __pycache__/
 *.pyc
+*.pyo
 .pytest_cache/
-*.db
-.DS_Store
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+venv/
+.venv/
+env/
+.env
+.env.*
+!.env.example
 
-# Frontend build artifacts
+# Node / Frontend
+node_modules/
 app/static/dist/
 *.tsbuildinfo
 
-# Visual companion brainstorm dirs
+# Editor / OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.bak
+
+# Logs
+*.log
+logs/
+
+# Brainstorm/spec/plan working directory (per project policy: not in repo)
 .superpowers/
+docs/superpowers/

@@ -4,7 +4,7 @@
 
 Self-hosted document OCR web service powered by PaddleOCR PPStructureV3 — projects, drag-and-drop, real per-page progress, lossless markdown / DOCX export.
 
-![OCR Studio UI](./screenshot.png)
+![OCR Studio UI](screenshot.png)
 
 ## Features
 

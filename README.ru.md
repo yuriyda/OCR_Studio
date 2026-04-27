@@ -4,7 +4,7 @@
 
 Самостоятельно развёртываемый веб-сервис распознавания документов на базе PaddleOCR PPStructureV3 — проекты, drag-and-drop, реальный постраничный прогресс, экспорт в markdown / DOCX без потерь.
 
-![OCR Studio UI](./screenshot.png)
+![OCR Studio UI](screenshot.png)
 
 ## Возможности
 
