@@ -68,7 +68,12 @@ def _walk_block(doc, node):
     if name == "p":
         doc.add_paragraph(node.get_text().strip())
         return
-    # Other block tags handled in later tasks 8-11.
+    if name in ("ul", "ol"):
+        style_name = "List Bullet" if name == "ul" else "List Number"
+        for li in node.find_all("li", recursive=False):
+            doc.add_paragraph(li.get_text().strip(), style=style_name)
+        return
+    # Other block tags handled in later tasks 9-11.
 
 
 def md_to_docx(md: str) -> bytes:

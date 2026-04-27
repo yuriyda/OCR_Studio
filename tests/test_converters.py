@@ -51,3 +51,30 @@ def test_html_to_docx_empty_input_returns_valid_docx():
     data = html_to_docx("")
     doc = _open_docx(data)
     assert isinstance(doc, DocxDocument)
+
+
+def test_html_to_docx_unordered_list():
+    data = html_to_docx("<ul><li>alpha</li><li>beta</li><li>gamma</li></ul>")
+    doc = _open_docx(data)
+    bullets = [p for p in doc.paragraphs if p.style.name == "List Bullet"]
+    assert len(bullets) == 3
+    assert [p.text for p in bullets] == ["alpha", "beta", "gamma"]
+
+
+def test_html_to_docx_ordered_list():
+    data = html_to_docx("<ol><li>one</li><li>two</li></ol>")
+    doc = _open_docx(data)
+    nums = [p for p in doc.paragraphs if p.style.name == "List Number"]
+    assert len(nums) == 2
+    assert [p.text for p in nums] == ["one", "two"]
+
+
+def test_html_to_docx_list_then_paragraph():
+    data = html_to_docx("<ul><li>x</li><li>y</li></ul><p>after</p>")
+    doc = _open_docx(data)
+    visible = [(p.style.name, p.text) for p in doc.paragraphs if p.text]
+    assert visible == [
+        ("List Bullet", "x"),
+        ("List Bullet", "y"),
+        ("Normal", "after"),
+    ]
