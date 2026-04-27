@@ -138,10 +138,23 @@ async def worker():
                     finally:
                         cb_conn.close()
 
+                def _stage(name: str):
+                    cb_conn = _conn()
+                    try:
+                        DocumentRepo(cb_conn).update(
+                            doc_id,
+                            stage="ocr",
+                            stage_detail=name,
+                            stage_updated_at=_now_iso(),
+                        )
+                    finally:
+                        cb_conn.close()
+
                 md = await asyncio.to_thread(
                     ocr_engine.process_file,
                     str(original),
                     _progress,
+                    _stage,
                 )
                 # ВСЕГДА сохраняем result.md как canonical source.
                 # TXT и DOCX генерируются лениво при первом запросе через
@@ -154,6 +167,7 @@ async def worker():
                     finished_at=_now_iso(),
                     progress_percent=100.0,
                     stage=None,
+                    stage_detail=None,
                     stage_updated_at=_now_iso(),
                 )
                 logger.info("Doc %s done: %s", doc_id, doc["filename"])
@@ -161,7 +175,7 @@ async def worker():
                 logger.exception("Doc %s failed", doc_id)
                 doc_repo.update(doc_id, status="error", error=str(e),
                                 finished_at=_now_iso(),
-                                stage=None, stage_updated_at=_now_iso())
+                                stage=None, stage_detail=None, stage_updated_at=_now_iso())
         finally:
             conn.close()
             task_queue.task_done()
@@ -327,8 +341,19 @@ def _doc_response(d: dict) -> dict:
     stage_label = None
     if stage == "engine_loading":
         stage_label = "Загрузка моделей PaddleOCR: layout, text, table, formula"
-    elif stage == "ocr" and d.get("current_page") and d.get("page_count"):
-        stage_label = f"PPStructureV3 (cyrillic) — страница {d['current_page']}/{d['page_count']}"
+    elif stage == "ocr":
+        page_part = ""
+        if d.get("current_page") and d.get("page_count"):
+            page_part = f"страница {d['current_page']}/{d['page_count']}"
+        detail = d.get("stage_detail")
+        if page_part and detail:
+            stage_label = f"{page_part}: {detail}"
+        elif page_part:
+            stage_label = f"PPStructureV3 — {page_part}"
+        elif detail:
+            stage_label = f"PPStructureV3: {detail}"
+        else:
+            stage_label = "PPStructureV3 (cyrillic)"
     return {
         "id": d["id"],
         "filename": d["filename"],
@@ -348,6 +373,7 @@ def _doc_response(d: dict) -> dict:
         "eta_seconds": eta,
         "available_formats": files.available_formats(DATA_DIR, d["id"]),
         "stage": stage,
+        "stage_detail": d.get("stage_detail"),
         "stage_label": stage_label,
     }
 

@@ -26,7 +26,7 @@ def test_init_idempotent(tmp_data_dir):
     db.init(db_path)  # повторный вызов не должен падать
     conn = sqlite3.connect(db_path)
     rows = conn.execute("SELECT version FROM schema_version ORDER BY version").fetchall()
-    assert rows == [(1,), (2,), (3,)]
+    assert rows == [(1,), (2,), (3,), (4,)]
     conn.close()
 
 
@@ -182,6 +182,20 @@ def test_migration_v3_idempotent(tmp_path):
     try:
         v = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
         assert v >= 3
+    finally:
+        conn.close()
+
+
+def test_migration_v4_adds_stage_detail_column(tmp_path):
+    from app import db
+    db_path = tmp_path / "test.db"
+    db.init(db_path)
+    conn = db.get_connection(db_path)
+    try:
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(documents)").fetchall()}
+        assert "stage_detail" in cols
+        v = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
+        assert v >= 4
     finally:
         conn.close()
 

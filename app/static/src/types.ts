@@ -49,6 +49,7 @@ export interface Document {
   error: string | null;
   available_formats: string[];
   stage: 'engine_loading' | 'ocr' | null;
+  stage_detail: string | null;
   stage_label: string | null;
 }
 

@@ -11,7 +11,7 @@ SQLite-подключение, инициализация схемы и мигр
 import sqlite3
 from pathlib import Path
 
-CURRENT_VERSION = 3
+CURRENT_VERSION = 4
 
 
 def get_connection(db_path: Path) -> sqlite3.Connection:
@@ -43,6 +43,9 @@ def init(db_path: Path) -> None:
         if current < 3:
             _migrate_to_v3(conn)
             conn.execute("INSERT INTO schema_version VALUES (3)")
+        if current < 4:
+            _migrate_to_v4(conn)
+            conn.execute("INSERT INTO schema_version VALUES (4)")
         conn.commit()
     finally:
         conn.close()
@@ -173,3 +176,13 @@ def _migrate_to_v3(conn: sqlite3.Connection) -> None:
     """
     conn.execute("ALTER TABLE documents ADD COLUMN stage TEXT")
     conn.execute("ALTER TABLE documents ADD COLUMN stage_updated_at TEXT")
+
+
+def _migrate_to_v4(conn: sqlite3.Connection) -> None:
+    """Add stage_detail column for sub-model name during OCR.
+
+    Examples: 'layout', 'text', 'table', 'formula', 'chart'. Worker writes via
+    stage_callback installed in app/ocr_engine.py. UI shows together with stage:
+    «Страница N/M: <stage_detail>».
+    """
+    conn.execute("ALTER TABLE documents ADD COLUMN stage_detail TEXT")

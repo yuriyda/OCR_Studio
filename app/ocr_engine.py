@@ -4,11 +4,14 @@
 Редактирование:
 - Язык OCR-движка зафиксирован = 'ru' (cyrillic-модель). Не добавлять lang-параметр
   обратно без согласования — см. spec ux-cleanup §2.
-- Public-API: `process_file(file_path, progress_callback=None)` — без lang-параметра.
+- Public-API: `process_file(file_path, progress_callback=None, stage_callback=None)`.
   Его вызывает worker в app/main.py.
 - Фикс порядка колонок таблиц через сортировку по X-координате (`html_table_to_markdown`)
   не удалять — он чинит баг SLANet (см. memory.md «Table Column Order Fix»).
-- progress_callback вызывается в начале обработки каждой страницы (1-based).
+- progress_callback вызывается в начале и конце обработки каждой страницы (1-based).
+- stage_callback вызывается перед вызовом каждой sub-model pipeline (layout/text/table/formula).
+- PDF разбивается на single-page файлы через PyMuPDF — predict() вызывается per-page.
+  Это даёт реальный прогресс за счёт потери batch-оптимизаций PaddleOCR (~30-50% slower).
 """
 
 import logging
@@ -31,6 +34,60 @@ PIPELINE_MODELS: list[dict] = [
     {"role": "table",    "name": "SLANet_plus + RT-DETR-L_wired_table_cell_det"},
     {"role": "formula",  "name": "PP-FormulaNet_plus-L"},
 ]
+
+
+class _Hooked:
+    """Callable proxy that fires callback(name) before delegating to inner.
+
+    Используется install_stage_hooks для оборачивания sub-model атрибутов
+    paddlex_pipeline. Ошибки callback изолированы — не ломают OCR-процесс.
+    """
+
+    def __init__(self, inner, callback, name):
+        self.inner = inner
+        self.callback = callback
+        self.name = name
+
+    def __call__(self, *args, **kwargs):
+        try:
+            self.callback(self.name)
+        except Exception:
+            pass  # callback errors must NOT break OCR
+        return self.inner(*args, **kwargs)
+
+    def __getattr__(self, item):
+        # Forward attribute access to inner (some pipeline code reads .device, .model_name etc.)
+        return getattr(self.inner, item)
+
+
+def install_stage_hooks(engine, on_stage_start) -> None:
+    """Wrap sub-models on engine.paddlex_pipeline so on_stage_start(name) fires
+    before each model invocation. Side-effect: replaces attributes in place.
+
+    Идемпотентно: если атрибут — наша обёртка _Hooked, не оборачиваем повторно.
+    Названия stage соответствуют user-facing labels: layout, text, table, formula,
+    region, chart. Sub-model отсутствует (опциональный pipeline) — просто пропускаем.
+    """
+    pipeline = getattr(engine, "paddlex_pipeline", None)
+    if pipeline is None:
+        return
+
+    targets = [
+        ("layout_det_model", "layout"),
+        ("region_detection_model", "region"),
+        ("formula_recognition_pipeline", "formula"),
+        ("general_ocr_pipeline", "text"),
+        ("table_recognition_pipeline", "table"),
+        ("chart_recognition_model", "chart"),
+    ]
+    for attr_name, stage_name in targets:
+        if not hasattr(pipeline, attr_name):
+            continue
+        inner = getattr(pipeline, attr_name)
+        if isinstance(inner, _Hooked):
+            inner.callback = on_stage_start  # update callback (re-install)
+            continue
+        setattr(pipeline, attr_name, _Hooked(inner, on_stage_start, stage_name))
 
 
 def get_engine() -> PPStructureV3:
@@ -159,35 +216,64 @@ def page_to_markdown(page_result, page_num: int) -> str:
 def process_file(
     file_path: str,
     progress_callback=None,
+    stage_callback=None,
 ) -> str:
     """Run OCR on a file and return the result as a markdown string.
 
     Язык зафиксирован = 'ru' (cyrillic-модель). Lang-параметр удалён — см. spec ux-cleanup §2.
 
-    Streaming: итерируем engine.predict() как ленивый generator, не материализуем
-    через list(). Это даёт progress_callback реальный per-page фронт.
+    Real progress: для PDF разбиваем на single-page файлы через PyMuPDF и
+    вызываем engine.predict() per-page. progress_callback срабатывает между
+    страницами с реальными значениями. Внутри одной страницы — sub-models
+    pipeline'а вызываются последовательно; stage_callback (если задан)
+    срабатывает перед каждой sub-model.
 
-    progress_callback(current_page: int, total_pages: int) вызывается ДО и ПОСЛЕ
-    обработки каждой страницы — UI polling (~2s) ловит хотя бы одно событие на страницу.
+    progress_callback(current_page: int, total_pages: int)
+    stage_callback(stage_name: str) — необязательный
     """
+    import tempfile
     engine = get_engine()
+    if stage_callback is not None:
+        install_stage_hooks(engine, stage_callback)
+
     path = Path(file_path)
+    is_pdf = path.suffix.lower() == ".pdf"
 
-    total_pages = 1
-    if path.suffix.lower() == ".pdf":
-        import fitz
-        with fitz.open(str(file_path)) as doc:
-            total_pages = doc.page_count
+    if not is_pdf:
+        # Image: single predict
+        if progress_callback is not None:
+            progress_callback(1, 1)
+        md_parts = [f"# {path.stem}\n"]
+        for page_idx, page_result in enumerate(engine.predict(str(file_path))):
+            md_parts.append(page_to_markdown(page_result, page_idx + 1))
+        if progress_callback is not None:
+            progress_callback(1, 1)
+        return "\n".join(md_parts)
 
-    md_parts = [f"# {path.stem}\n"]
-    page_idx = 0
-    for page_result in engine.predict(str(file_path)):  # streaming, no list()
-        page_idx += 1
-        if progress_callback is not None:
-            progress_callback(page_idx, max(total_pages, page_idx))
-        md_parts.append(page_to_markdown(page_result, page_idx))
-        if progress_callback is not None:
-            progress_callback(page_idx, max(total_pages, page_idx))
+    # PDF: split per page
+    import fitz
+    with fitz.open(str(file_path)) as src_pdf:
+        total_pages = src_pdf.page_count
+        md_parts = [f"# {path.stem}\n"]
+        with tempfile.TemporaryDirectory(prefix="ocr_split_") as tmpdir:
+            tmp_root = Path(tmpdir)
+            for page_idx in range(total_pages):
+                page_num = page_idx + 1
+                if progress_callback is not None:
+                    progress_callback(page_num, total_pages)
+
+                # Извлекаем одну страницу в отдельный PDF
+                single_pdf = tmp_root / f"page_{page_num:03d}.pdf"
+                with fitz.open() as out_pdf:
+                    out_pdf.insert_pdf(src_pdf, from_page=page_idx, to_page=page_idx)
+                    out_pdf.save(str(single_pdf))
+
+                # OCR одной страницы; stage hooks fire внутри
+                for page_result in engine.predict(str(single_pdf)):
+                    md_parts.append(page_to_markdown(page_result, page_num))
+
+                if progress_callback is not None:
+                    progress_callback(page_num, total_pages)
 
     return "\n".join(md_parts)
 

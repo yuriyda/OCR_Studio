@@ -308,7 +308,7 @@ def test_page_progress_updates_during_processing(tmp_data_dir, monkeypatch):
 
     captured_pcent = []
 
-    def fake_process(path, progress_callback=None):
+    def fake_process(path, progress_callback=None, stage_callback=None):
         if progress_callback:
             progress_callback(1, 4)
             conn = db.get_connection(main.DB_PATH)
@@ -1051,6 +1051,26 @@ def test_doc_response_ocr_label_includes_pipeline_name(client, tmp_data_dir):
     target = [d for d in rows if d["id"] == did][0]
     assert "PPStructureV3" in target["stage_label"]
     assert "2/5" in target["stage_label"]
+
+
+def test_doc_response_ocr_label_with_stage_detail(client, tmp_data_dir):
+    """stage_label для ocr включает page info и stage_detail (sub-model name)."""
+    from app import storage, db
+    pid, did = _make_doc(client, tmp_data_dir, "x.pdf")
+    conn = db.get_connection(tmp_data_dir / "data.db")
+    try:
+        storage.DocumentRepo(conn).update(
+            did, status="processing", stage="ocr",
+            current_page=2, page_count=5,
+            stage_detail="text",
+        )
+    finally:
+        conn.close()
+    r = client.get(f"/api/status?project_id={pid}")
+    rows = r.json()
+    target = [d for d in rows if d["id"] == did][0]
+    assert "2/5" in target["stage_label"]
+    assert "text" in target["stage_label"]
 
 
 def test_system_info_includes_pipeline_models(client):
