@@ -29,6 +29,7 @@
   "toast.copied": "Copied",
   "toast.clipboard_unavailable": "Clipboard unavailable (HTTPS or localhost required)",
   "toast.processing_required": "Wait for processing to finish",
+  "toast.recognize_started": "Recognition started: {count}",
   "doc.status.queued": "queued",
   "doc.status.done": "done",
   "doc.status.error": "error",

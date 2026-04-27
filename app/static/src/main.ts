@@ -190,6 +190,11 @@ async function uploadFiles(filesList: File[], pid: number): Promise<void> {
     }
     await refreshProjects();
     await refreshDocuments();
+    // После upload — гарантированно живой polling (мог быть остановлен shouldStop ранее).
+    // Иначе queued doc будет «висеть» в UI без обновлений до клика «Распознать».
+    if (docsCache.some(d => d.status === 'queued' || d.status === 'processing')) {
+      polling.start();
+    }
   } catch (e) {
     toast.show((e as Error).message, 'error');
   }
@@ -291,7 +296,13 @@ function bindUI(): void {
     const pid = state.activeProjectId;
     try {
       const r = await api.recognizeProject(pid);
-      if (r.started > 0) polling.start();
+      // Безусловно sync UI с backend (вдруг docsCache был stale + polling умер раньше).
+      await refreshDocuments();
+      // Безусловно reactive polling — даже если started=0, могут быть processing документы.
+      polling.start();
+      if (r.started > 0) {
+        toast.show(t('toast.recognize_started', { count: r.started }), 'info');
+      }
     } catch (e) { toast.show((e as Error).message, 'error'); }
   });
 

@@ -29,6 +29,7 @@
   "toast.copied": "Скопировано",
   "toast.clipboard_unavailable": "Буфер обмена недоступен (требуется HTTPS или localhost)",
   "toast.processing_required": "Дождитесь завершения обработки",
+  "toast.recognize_started": "Запущено распознавание: {count}",
   "doc.status.queued": "в очереди",
   "doc.status.done": "готово",
   "doc.status.error": "ошибка",
