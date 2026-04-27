@@ -7,19 +7,19 @@ const docs: Document[] = [
   { id: 'a1', project_id: 1, filename: 'a.pdf', size_bytes: 1500, format: 'md', lang: 'ru', status: 'done',
     created_at: '2026-04-26T00:00:00', started_at: null, finished_at: null,
     page_count: null, current_page: null, progress_percent: null, elapsed_seconds: null, eta_seconds: null,
-    error: null, available_formats: ['md'] },
+    error: null, available_formats: ['md'], stage: null, stage_label: null },
   { id: 'b2', project_id: 1, filename: 'b.png', size_bytes: 500_000, format: 'md', lang: 'ru', status: 'queued',
     created_at: '2026-04-26T00:00:01', started_at: null, finished_at: null,
     page_count: null, current_page: null, progress_percent: null, elapsed_seconds: null, eta_seconds: null,
-    error: null, available_formats: [] },
+    error: null, available_formats: [], stage: null, stage_label: null },
   { id: 'c3', project_id: 1, filename: 'c.pdf', size_bytes: 2_000_000, format: 'md', lang: 'ru', status: 'processing',
     created_at: '2026-04-26T00:00:02', started_at: '2026-04-26T00:00:03', finished_at: null,
     current_page: 5, page_count: 12, progress_percent: 41.6, elapsed_seconds: 30, eta_seconds: 42,
-    error: null, available_formats: [] },
+    error: null, available_formats: [], stage: 'ocr', stage_label: 'OCR страница 5/12' },
   { id: 'd4', project_id: 1, filename: 'd.tiff', size_bytes: 800_000, format: 'md', lang: 'ru', status: 'error',
     created_at: '2026-04-26T00:00:03', started_at: null, finished_at: null,
     page_count: null, current_page: null, progress_percent: null, elapsed_seconds: null, eta_seconds: null,
-    error: 'OCR failed: bad scan', available_formats: [] },
+    error: 'OCR failed: bad scan', available_formats: [], stage: null, stage_label: null },
 ];
 
 describe('renderDocuments', () => {
@@ -80,7 +80,7 @@ describe('renderDocuments', () => {
       size_bytes: 0, format: 'md', lang: 'ru', status: 'queued',
       created_at: 'x', started_at: null, finished_at: null,
       page_count: null, current_page: null, progress_percent: null, elapsed_seconds: null, eta_seconds: null,
-      error: null, available_formats: [],
+      error: null, available_formats: [], stage: null, stage_label: null,
     }], null);
     expect(c.innerHTML).not.toContain('<script>');
     expect(c.innerHTML).toContain('&lt;script&gt;');

@@ -928,3 +928,12 @@ def test_preview_page_404_on_invalid_page(client, tmp_data_dir):
 def test_preview_info_404_for_missing_doc(client):
     r = client.get("/api/preview/nonexistent/info")
     assert r.status_code == 404
+
+
+def test_doc_response_includes_stage_field(client, tmp_data_dir):
+    pid, did = _make_doc(client, tmp_data_dir, "x.pdf")
+    r = client.get(f"/api/status?project_id=1")
+    assert r.status_code == 200
+    rows = r.json()
+    assert rows[0]["stage"] is None  # default
+    assert "stage_label" in rows[0]

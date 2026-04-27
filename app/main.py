@@ -310,6 +310,12 @@ def _doc_response(d: dict) -> dict:
                     eta = max(0, int(total_estimate - elapsed))
         except (ValueError, TypeError):
             pass
+    stage = d.get("stage")
+    stage_label = None
+    if stage == "engine_loading":
+        stage_label = "Загрузка моделей PaddleOCR…"
+    elif stage == "ocr" and d.get("current_page") and d.get("page_count"):
+        stage_label = f"OCR страница {d['current_page']}/{d['page_count']}"
     return {
         "id": d["id"],
         "filename": d["filename"],
@@ -328,6 +334,8 @@ def _doc_response(d: dict) -> dict:
         "elapsed_seconds": elapsed,
         "eta_seconds": eta,
         "available_formats": files.available_formats(DATA_DIR, d["id"]),
+        "stage": stage,
+        "stage_label": stage_label,
     }
 
 

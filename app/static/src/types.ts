@@ -48,6 +48,8 @@ export interface Document {
   eta_seconds: number | null;
   error: string | null;
   available_formats: string[];
+  stage: 'engine_loading' | 'ocr' | null;
+  stage_label: string | null;
 }
 
 export interface SystemInfo {
