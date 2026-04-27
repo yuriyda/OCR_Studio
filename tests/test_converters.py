@@ -78,3 +78,38 @@ def test_html_to_docx_list_then_paragraph():
         ("List Bullet", "y"),
         ("Normal", "after"),
     ]
+
+
+def test_html_to_docx_inline_bold():
+    data = html_to_docx("<p>plain <strong>bold</strong> text</p>")
+    doc = _open_docx(data)
+    p = [p for p in doc.paragraphs if p.text][0]
+    runs = list(p.runs)
+    bold_runs = [r for r in runs if r.bold]
+    assert bold_runs, "no bold run found"
+    assert "bold" in "".join(r.text for r in bold_runs)
+
+
+def test_html_to_docx_inline_italic():
+    data = html_to_docx("<p>see <em>this</em> word</p>")
+    doc = _open_docx(data)
+    p = [p for p in doc.paragraphs if p.text][0]
+    italic_runs = [r for r in p.runs if r.italic]
+    assert italic_runs and "this" in "".join(r.text for r in italic_runs)
+
+
+def test_html_to_docx_inline_code():
+    data = html_to_docx("<p>use <code>print()</code> here</p>")
+    doc = _open_docx(data)
+    p = [p for p in doc.paragraphs if p.text][0]
+    code_runs = [r for r in p.runs if r.font.name == "Courier New"]
+    assert code_runs and "print()" in "".join(r.text for r in code_runs)
+
+
+def test_html_to_docx_link_renders_text_and_url():
+    data = html_to_docx('<p>see <a href="https://example.com">site</a> docs</p>')
+    doc = _open_docx(data)
+    p = [p for p in doc.paragraphs if p.text][0]
+    text = p.text
+    assert "site" in text
+    assert "https://example.com" in text  # URL appears (in parens or as raw)

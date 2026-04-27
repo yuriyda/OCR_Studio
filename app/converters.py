@@ -63,17 +63,53 @@ def _walk_block(doc, node):
         return
     name = (node.name or "").lower()
     if name in _HEADING_TAGS:
-        doc.add_heading(node.get_text().strip(), level=_HEADING_TAGS[name])
+        h = doc.add_heading("", level=_HEADING_TAGS[name])
+        _walk_inline(h, node)
         return
     if name == "p":
-        doc.add_paragraph(node.get_text().strip())
+        para = doc.add_paragraph()
+        _walk_inline(para, node)
         return
     if name in ("ul", "ol"):
         style_name = "List Bullet" if name == "ul" else "List Number"
         for li in node.find_all("li", recursive=False):
-            doc.add_paragraph(li.get_text().strip(), style=style_name)
+            para = doc.add_paragraph(style=style_name)
+            _walk_inline(para, li)
         return
     # Other block tags handled in later tasks 9-11.
+
+
+def _walk_inline(para, node):
+    """Walk inline children of a block node, building python-docx runs."""
+    for child in node.children:
+        if isinstance(child, NavigableString):
+            text = str(child)
+            if text:
+                para.add_run(text)
+            continue
+        cname = (child.name or "").lower()
+        if cname in ("strong", "b"):
+            run = para.add_run(child.get_text())
+            run.bold = True
+        elif cname in ("em", "i"):
+            run = para.add_run(child.get_text())
+            run.italic = True
+        elif cname == "code":
+            run = para.add_run(child.get_text())
+            run.font.name = "Courier New"
+        elif cname == "a":
+            href = child.get("href", "")
+            text = child.get_text()
+            # MVP: текст + URL в скобках. Real OOXML hyperlink — отдельная задача.
+            if href:
+                para.add_run(f"{text} ({href})")
+            else:
+                para.add_run(text)
+        elif cname == "br":
+            para.add_run().add_break()
+        else:
+            # Unknown inline → fallback to text
+            para.add_run(child.get_text())
 
 
 def md_to_docx(md: str) -> bytes:
