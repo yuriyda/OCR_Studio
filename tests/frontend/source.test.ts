@@ -56,21 +56,43 @@ describe('renderSourcePane', () => {
     const active = thumbs.querySelector('.thumb-page-active') as HTMLImageElement;
     expect(active?.dataset.pageIdx).toBe('1');
     const largeImg = large.querySelector('.source-large') as HTMLImageElement;
-    expect(largeImg.src).toContain('BASE64B');
+    // Large page now uses URL (1-indexed), NOT base64
+    expect(largeImg.getAttribute('src')).toBe('/api/preview/7p/page/2');
   });
 
   it('PDF: clamps selectedPageIdx to valid range', () => {
     const { thumbs, large } = setup();
     const doc = baseDoc({ id: '9p', filename: 'doc.pdf' });
     renderSourcePane(thumbs, large, doc, ['A', 'B'], 99);
-    expect((large.querySelector('.source-large') as HTMLImageElement).src).toContain('B');
+    // idx clamped to 1 (last), page number = 2
+    expect((large.querySelector('.source-large') as HTMLImageElement).getAttribute('src')).toBe('/api/preview/9p/page/2');
   });
 
   it('PDF: handles negative selectedPageIdx', () => {
     const { thumbs, large } = setup();
     const doc = baseDoc({ id: '9p', filename: 'doc.pdf' });
     renderSourcePane(thumbs, large, doc, ['A', 'B'], -5);
-    expect((large.querySelector('.source-large') as HTMLImageElement).src).toContain('A');
+    // idx clamped to 0 (first), page number = 1
+    expect((large.querySelector('.source-large') as HTMLImageElement).getAttribute('src')).toBe('/api/preview/9p/page/1');
+  });
+
+  it('large page uses /api/preview/{id}/page/{n} URL, not base64', () => {
+    const thumbs = document.createElement('div');
+    const large = document.createElement('div');
+    const doc = { id: 'doc1', filename: 'x.pdf' } as any;
+    renderSourcePane(thumbs, large, doc, ['THUMB1B64', 'THUMB2B64'], 1);
+    const img = large.querySelector('img.source-large') as HTMLImageElement;
+    expect(img.getAttribute('src')).toBe('/api/preview/doc1/page/2');
+  });
+
+  it('thumbnails still use base64 (compact strip)', () => {
+    const thumbs = document.createElement('div');
+    const large = document.createElement('div');
+    const doc = { id: 'doc1', filename: 'x.pdf' } as any;
+    renderSourcePane(thumbs, large, doc, ['THUMB1B64', 'THUMB2B64'], 0);
+    const thumbImgs = thumbs.querySelectorAll('img.source-thumb');
+    expect(thumbImgs.length).toBe(2);
+    expect(thumbImgs[0]!.getAttribute('src')).toBe('data:image/jpeg;base64,THUMB1B64');
   });
 
   it('PDF: shows preview.unavailable when pages is empty', () => {
