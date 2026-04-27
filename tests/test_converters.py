@@ -166,3 +166,42 @@ def test_html_to_docx_table_uneven_rows_padded():
     t = doc.tables[0]
     assert len(t.columns) == 3  # max width
     assert t.rows[1].cells[0].text == "x"
+
+
+def test_md_to_docx_full_document_smoke():
+    md = (
+        "# Title\n"
+        "\n"
+        "## Section\n"
+        "\n"
+        "Plain paragraph with **bold** and *italic* and `code`.\n"
+        "\n"
+        "- bullet one\n"
+        "- bullet two\n"
+        "\n"
+        "1. numbered first\n"
+        "2. numbered second\n"
+        "\n"
+        "> A quote\n"
+        "\n"
+        "| col1 | col2 |\n"
+        "| ---- | ---- |\n"
+        "| a    | b    |\n"
+        "\n"
+        "```\n"
+        "fenced\n"
+        "code\n"
+        "```\n"
+    )
+    data = md_to_docx(md)
+    doc = _open_docx(data)
+    headings = [p for p in doc.paragraphs if p.style.name.startswith("Heading")]
+    assert len(headings) >= 2
+    bullets = [p for p in doc.paragraphs if p.style.name == "List Bullet"]
+    assert len(bullets) == 2
+    nums = [p for p in doc.paragraphs if p.style.name == "List Number"]
+    assert len(nums) == 2
+    assert len(doc.tables) == 1
+    has_code = any(r.font.name == "Courier New"
+                   for p in doc.paragraphs for r in p.runs)
+    assert has_code
