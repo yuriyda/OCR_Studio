@@ -58,3 +58,41 @@ def test_render_thumbs_missing_original_raises(tmp_path):
     from app import preview_render
     with pytest.raises(FileNotFoundError):
         preview_render.render_thumbs(tmp_path, "nonexistent")
+
+
+def test_render_page_creates_full_resolution_jpg(pdf_doc):
+    from app import preview_render, files
+    data_dir, doc_id = pdf_doc
+    p = preview_render.render_page(data_dir, doc_id, 2)
+    assert p == files.preview_page_path(data_dir, doc_id, 2)
+    assert p.exists() and p.stat().st_size > 0
+
+
+def test_render_page_idempotent_uses_cache(pdf_doc):
+    from app import preview_render, files
+    data_dir, doc_id = pdf_doc
+    preview_render.render_page(data_dir, doc_id, 1)
+    first_mtime = files.preview_page_path(data_dir, doc_id, 1).stat().st_mtime
+    preview_render.render_page(data_dir, doc_id, 1)
+    second_mtime = files.preview_page_path(data_dir, doc_id, 1).stat().st_mtime
+    assert first_mtime == second_mtime
+
+
+def test_render_page_invalid_page_num_raises(pdf_doc):
+    from app import preview_render
+    data_dir, doc_id = pdf_doc
+    # 3-page PDF, requesting page 5
+    with pytest.raises(ValueError, match="page"):
+        preview_render.render_page(data_dir, doc_id, 5)
+
+
+def test_render_page_for_image_only_page_1_valid(tmp_path):
+    from PIL import Image
+    from app import preview_render
+    docs = tmp_path / "docs" / "img1"
+    docs.mkdir(parents=True)
+    Image.new("RGB", (400, 300), "white").save(str(docs / "original.png"))
+    p = preview_render.render_page(tmp_path, "img1", 1)
+    assert p.exists()
+    with pytest.raises(ValueError):
+        preview_render.render_page(tmp_path, "img1", 2)

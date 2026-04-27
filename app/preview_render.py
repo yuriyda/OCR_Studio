@@ -60,11 +60,53 @@ def render_thumbs(data_dir: Path, doc_id: str) -> list[Path]:
         from PIL import Image
         out = files.preview_thumb_path(data_dir, doc_id, 1)
         if not out.exists():
-            img = Image.open(original)
-            img.thumbnail((THUMB_MAX_SIDE, THUMB_MAX_SIDE))
-            buf = io.BytesIO()
-            img.convert("RGB").save(buf, format="JPEG", quality=THUMB_QUALITY)
+            with Image.open(original) as img:
+                img.thumbnail((THUMB_MAX_SIDE, THUMB_MAX_SIDE))
+                buf = io.BytesIO()
+                img.convert("RGB").save(buf, format="JPEG", quality=THUMB_QUALITY)
             out.write_bytes(buf.getvalue())
         paths.append(out)
 
     return paths
+
+
+def render_page(data_dir: Path, doc_id: str, page_num: int) -> Path:
+    """Сгенерировать (или прочитать из кэша) full-разрешение страницы.
+
+    PDF: страница page_num (1-indexed) через PyMuPDF @ PAGE_DPI.
+    Image: только page_num=1.
+
+    Raises:
+        FileNotFoundError: original отсутствует.
+        ValueError: page_num вне диапазона [1, total_pages].
+    """
+    if page_num < 1:
+        raise ValueError(f"page_num must be >= 1, got {page_num}")
+
+    original = files.original_path(data_dir, doc_id)
+    if original is None or not original.exists():
+        raise FileNotFoundError(f"original missing for doc {doc_id}")
+
+    files.ensure_preview_dir(data_dir, doc_id)
+    out = files.preview_page_path(data_dir, doc_id, page_num)
+    if out.exists():
+        return out
+
+    if _is_pdf(original):
+        import fitz
+        with fitz.open(str(original)) as pdf:
+            if page_num > pdf.page_count:
+                raise ValueError(f"page_num {page_num} > pdf.page_count {pdf.page_count}")
+            pix = pdf[page_num - 1].get_pixmap(dpi=PAGE_DPI)
+            out.write_bytes(pix.tobytes("jpeg", PAGE_QUALITY))
+    else:
+        if page_num != 1:
+            raise ValueError(f"image has only page 1, got {page_num}")
+        from PIL import Image
+        with Image.open(original) as img:
+            img.thumbnail((PAGE_MAX_SIDE, PAGE_MAX_SIDE))
+            buf = io.BytesIO()
+            img.convert("RGB").save(buf, format="JPEG", quality=PAGE_QUALITY)
+        out.write_bytes(buf.getvalue())
+
+    return out
