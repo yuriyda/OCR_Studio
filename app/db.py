@@ -11,7 +11,7 @@ SQLite-подключение, инициализация схемы и мигр
 import sqlite3
 from pathlib import Path
 
-CURRENT_VERSION = 2
+CURRENT_VERSION = 3
 
 
 def get_connection(db_path: Path) -> sqlite3.Connection:
@@ -40,6 +40,9 @@ def init(db_path: Path) -> None:
         if current < 2:
             # _migrate_to_v2 включает INSERT INTO schema_version VALUES (2) в свою транзакцию.
             _migrate_to_v2(conn)
+        if current < 3:
+            _migrate_to_v3(conn)
+            conn.execute("INSERT INTO schema_version VALUES (3)")
         conn.commit()
     finally:
         conn.close()
@@ -151,3 +154,22 @@ def _migrate_to_v2(conn: sqlite3.Connection) -> None:
         if fk_was_on:
             conn.execute("PRAGMA foreign_keys = ON")
         conn.isolation_level = old_iso
+
+
+def _migrate_to_v3(conn: sqlite3.Connection) -> None:
+    """Добавить stage / stage_updated_at колонки для отчётности о прогрессе.
+
+    Значения stage (в `documents.stage`):
+    - NULL — обычное состояние (queued/done/error не нуждаются в этапе)
+    - 'engine_loading' — worker ждёт `ocr_engine.get_engine()` (~30s при первом OCR)
+    - 'ocr' — engine.predict() в работе; `current_page`/`page_count`/`progress_percent`
+              обновляются параллельно
+
+    `stage_updated_at` — ISO-8601 timestamp последнего обновления stage. Используется
+    для будущей heartbeat-проверки «не завис ли worker».
+
+    ALTER TABLE ADD COLUMN безопасен для добавления nullable колонок — пересоздание
+    таблицы не требуется.
+    """
+    conn.execute("ALTER TABLE documents ADD COLUMN stage TEXT")
+    conn.execute("ALTER TABLE documents ADD COLUMN stage_updated_at TEXT")

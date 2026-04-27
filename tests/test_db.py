@@ -16,7 +16,7 @@ def test_init_creates_schema(tmp_data_dir):
     )}
     assert {"schema_version", "projects", "documents"} <= tables
     version = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
-    assert version == 2
+    assert version >= 3
     conn.close()
 
 
@@ -26,7 +26,7 @@ def test_init_idempotent(tmp_data_dir):
     db.init(db_path)  # повторный вызов не должен падать
     conn = sqlite3.connect(db_path)
     rows = conn.execute("SELECT version FROM schema_version ORDER BY version").fetchall()
-    assert rows == [(1,), (2,)]
+    assert rows == [(1,), (2,), (3,)]
     conn.close()
 
 
@@ -157,6 +157,35 @@ def test_check_constraint_rejects_bad_doc_created_at(tmp_data_dir):
     conn.close()
 
 
+def test_migration_v3_adds_stage_columns(tmp_path):
+    from app import db
+    db_path = tmp_path / "test.db"
+    db.init(db_path)
+    conn = db.get_connection(db_path)
+    try:
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(documents)").fetchall()}
+        assert "stage" in cols
+        assert "stage_updated_at" in cols
+        # Schema version should be at least 3
+        v = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
+        assert v >= 3
+    finally:
+        conn.close()
+
+
+def test_migration_v3_idempotent(tmp_path):
+    from app import db
+    db_path = tmp_path / "test.db"
+    db.init(db_path)
+    db.init(db_path)  # second call — no error
+    conn = db.get_connection(db_path)
+    try:
+        v = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
+        assert v >= 3
+    finally:
+        conn.close()
+
+
 def test_v2_migration_preserves_v1_data(tmp_data_dir):
     """v1→v2 миграция должна сохранить существующие записи."""
     db_path = tmp_data_dir / "data.db"
@@ -182,7 +211,7 @@ def test_v2_migration_preserves_v1_data(tmp_data_dir):
     raw.commit()
     raw.close()
 
-    # Теперь дёргаем init — должен подхватить и доехать до v2
+    # Теперь дёргаем init — должен подхватить и доехать до актуальной версии
     db.init(db_path)
     conn = db.get_connection(db_path)
     proj_count = conn.execute("SELECT COUNT(*) FROM projects WHERE name='Legacy'").fetchone()[0]
@@ -190,5 +219,5 @@ def test_v2_migration_preserves_v1_data(tmp_data_dir):
     assert proj_count == 1
     assert doc_count == 1
     version = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
-    assert version == 2
+    assert version >= 3
     conn.close()
