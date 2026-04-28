@@ -95,3 +95,32 @@ def test_docx_to_html_sanitized():
     d.save(buf)
     html = preview.docx_to_html(buf.getvalue())
     assert "<script" not in html
+
+
+def test_block_formula_passthrough():
+    """markdown_to_html must preserve $$...$$ math blocks unchanged."""
+    from app.preview import markdown_to_html
+    md = "Before paragraph\n\n$$\n\\frac{x^2}{y}\n$$\n\nAfter paragraph"
+    html = markdown_to_html(md)
+    assert "\\frac" in html
+    assert "$$" in html or "frac{x^2}{y}" in html
+
+
+def test_multiple_formulas_in_one_doc():
+    from app.preview import markdown_to_html
+    md = (
+        "$$\nE = mc^2\n$$\n\n"
+        "Paragraph in between.\n\n"
+        "$$\n\\int_0^1 x\\,dx\n$$\n"
+    )
+    html = markdown_to_html(md)
+    assert "mc^2" in html
+    assert "\\int" in html
+
+
+def test_invalid_latex_kept_as_text():
+    """Garbled formula content must not crash the renderer."""
+    from app.preview import markdown_to_html
+    md = "$$\n\\frac{ no closing brace\n$$"
+    html = markdown_to_html(md)
+    assert html
