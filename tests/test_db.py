@@ -26,7 +26,7 @@ def test_init_idempotent(tmp_data_dir):
     db.init(db_path)  # second call must not raise
     conn = sqlite3.connect(db_path)
     rows = conn.execute("SELECT version FROM schema_version ORDER BY version").fetchall()
-    assert rows == [(1,), (2,), (3,), (4,)]
+    assert rows == [(1,), (2,), (3,), (4,), (5,)]
     conn.close()
 
 
@@ -196,6 +196,63 @@ def test_migration_v4_adds_stage_detail_column(tmp_path):
         assert "stage_detail" in cols
         v = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
         assert v >= 4
+    finally:
+        conn.close()
+
+
+def test_settings_table_created_on_v5(tmp_path):
+    from app import db
+    db.init(tmp_path / "data.db")
+    conn = db.get_connection(tmp_path / "data.db")
+    try:
+        cur = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='settings'"
+        ).fetchone()
+        assert cur is not None, "settings table must exist after migration"
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(settings)").fetchall()]
+        assert cols == ["key", "value"], f"unexpected columns: {cols}"
+        ver = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
+        assert ver == 5
+    finally:
+        conn.close()
+
+
+def test_settings_migration_marks_existing_users_onboarded(tmp_path):
+    """v4 → v5 migration on existing DB sets onboarding_seen='1'."""
+    from app import db
+    conn_setup = db.get_connection(tmp_path / "data.db")
+    conn_setup.execute("CREATE TABLE schema_version (version INTEGER PRIMARY KEY)")
+    conn_setup.execute("INSERT INTO schema_version VALUES (1)")
+    conn_setup.execute("INSERT INTO schema_version VALUES (2)")
+    conn_setup.execute("INSERT INTO schema_version VALUES (3)")
+    conn_setup.execute("INSERT INTO schema_version VALUES (4)")
+    conn_setup.commit()
+    conn_setup.close()
+
+    db.init(tmp_path / "data.db")
+
+    conn = db.get_connection(tmp_path / "data.db")
+    try:
+        row = conn.execute(
+            "SELECT value FROM settings WHERE key='onboarding_seen'"
+        ).fetchone()
+        assert row is not None
+        assert row[0] == "1", "existing users must skip onboarding"
+    finally:
+        conn.close()
+
+
+def test_settings_migration_fresh_install_not_onboarded(tmp_path):
+    """Fresh DB (no prior schema_version) sets onboarding_seen='0'."""
+    from app import db
+    db.init(tmp_path / "data.db")
+    conn = db.get_connection(tmp_path / "data.db")
+    try:
+        row = conn.execute(
+            "SELECT value FROM settings WHERE key='onboarding_seen'"
+        ).fetchone()
+        assert row is not None
+        assert row[0] == "0", "fresh install must show onboarding"
     finally:
         conn.close()
 

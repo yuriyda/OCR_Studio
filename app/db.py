@@ -11,7 +11,7 @@ Maintenance notes:
 import sqlite3
 from pathlib import Path
 
-CURRENT_VERSION = 4
+CURRENT_VERSION = 5
 
 
 def get_connection(db_path: Path) -> sqlite3.Connection:
@@ -46,6 +46,9 @@ def init(db_path: Path) -> None:
         if current < 4:
             _migrate_to_v4(conn)
             conn.execute("INSERT INTO schema_version VALUES (4)")
+        if current < 5:
+            _migrate_to_v5(conn, was_fresh=(current == 0))
+            conn.execute("INSERT INTO schema_version VALUES (5)")
         conn.commit()
     finally:
         conn.close()
@@ -185,3 +188,30 @@ def _migrate_to_v4(conn: sqlite3.Connection) -> None:
     "Page N/M: <stage_detail>".
     """
     conn.execute("ALTER TABLE documents ADD COLUMN stage_detail TEXT")
+
+
+def _migrate_to_v5(conn: sqlite3.Connection, was_fresh: bool) -> None:
+    """Create settings table for HQ-mode toggle and onboarding flag.
+
+    Existing installations (was_fresh=False) get onboarding_seen='1' so they do
+    not see the welcome modal. Fresh installations get '0'. All hq_* keys default
+    to '0' (basic mode); the onboarding modal recommends turning them on based
+    on detected GPU VRAM.
+    """
+    conn.execute("""
+        CREATE TABLE settings (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+    """)
+    onboarding_value = "1" if not was_fresh else "0"
+    defaults = [
+        ("hq_mode", "0"),
+        ("hq_orientation", "0"),
+        ("hq_unwarping", "0"),
+        ("hq_textline", "0"),
+        ("hq_chart", "0"),
+        ("hq_seal", "0"),
+        ("onboarding_seen", onboarding_value),
+    ]
+    conn.executemany("INSERT INTO settings (key, value) VALUES (?, ?)", defaults)
