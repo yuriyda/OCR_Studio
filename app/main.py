@@ -83,7 +83,9 @@ async def lifespan(app: FastAPI):
         conn.close()
     _spawn_bg(worker())
     _spawn_bg(orphan_cleanup_loop())
-    asyncio.get_running_loop().run_in_executor(None, ocr_engine.get_engine)
+    asyncio.get_running_loop().run_in_executor(
+        None, lambda: ocr_engine.get_engine(DB_PATH)
+    )
     yield
     # Shutdown — worker and cleanup_loop exit together with the process
 
@@ -119,7 +121,7 @@ async def worker():
                 # Engine may not be loaded yet (~30 s). Mark stage before the blocking load call.
                 if ocr_engine._engine is None:
                     doc_repo.update(doc_id, stage="engine_loading", stage_updated_at=_now_iso())
-                    await asyncio.to_thread(ocr_engine.get_engine)
+                    await asyncio.to_thread(ocr_engine.get_engine, DB_PATH)
 
                 doc_repo.update(doc_id, stage="ocr", stage_updated_at=_now_iso())
 

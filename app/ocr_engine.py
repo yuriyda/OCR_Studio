@@ -122,17 +122,41 @@ def install_stage_hooks(engine, on_stage_start) -> None:
             setattr(actual, attr_name, _Hooked(inner, on_stage_start, stage_name))
 
 
-def get_engine() -> PPStructureV3:
+def get_engine(db_path: Path | None = None) -> "PPStructureV3":
     """Return (and lazily initialize) the shared PPStructureV3 engine.
 
     OCR engine language is fixed to 'ru' (cyrillic model). The cyrillic model
-    also handles latin characters well — adequate for mixed RU+EN documents
-    without splitting into two models. See spec ux-cleanup §2.
+    also handles latin characters well — adequate for mixed RU+EN documents.
+    See spec ux-cleanup §2.
+
+    HQ-mode flags are read from SettingsRepo on each cold start. Runtime changes
+    require reload_engine_async().
     """
     global _engine
     if _engine is None:
-        logger.info("Loading PPStructureV3 models (lang=ru, this may take ~30 s)...")
-        _engine = PPStructureV3(use_table_recognition=True, lang='ru')
+        from . import db, settings as settings_mod
+        cfg: dict[str, bool] = {k: False for k in settings_mod.HQ_KEYS}
+        if db_path is not None:
+            conn = db.get_connection(db_path)
+            try:
+                cfg = settings_mod.SettingsRepo(conn).get_hq_config()
+            finally:
+                conn.close()
+        logger.info(
+            "Loading PPStructureV3 (lang=ru, HQ flags: orientation=%s unwarp=%s "
+            "textline=%s chart=%s seal=%s)...",
+            cfg["hq_orientation"], cfg["hq_unwarping"], cfg["hq_textline"],
+            cfg["hq_chart"], cfg["hq_seal"],
+        )
+        _engine = PPStructureV3(
+            use_table_recognition=True,
+            use_doc_orientation_classify=cfg["hq_orientation"],
+            use_doc_unwarping=cfg["hq_unwarping"],
+            use_textline_orientation=cfg["hq_textline"],
+            use_chart_recognition=cfg["hq_chart"],
+            use_seal_recognition=cfg["hq_seal"],
+            lang='ru',
+        )
         logger.info("PPStructureV3 ready.")
     return _engine
 

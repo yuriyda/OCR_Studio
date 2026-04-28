@@ -315,3 +315,46 @@ def test_process_file_iterates_generator_lazily(monkeypatch, tmp_path):
     )
 
 
+def test_get_engine_passes_use_flags_from_settings(monkeypatch, tmp_path):
+    """get_engine must read SettingsRepo and forward use_* flags to PPStructureV3."""
+    from app import db, ocr_engine
+    from app.settings import SettingsRepo
+    import sys
+
+    # Reset module state
+    monkeypatch.setattr(ocr_engine, "_engine", None)
+
+    db_path = tmp_path / "data.db"
+    db.init(db_path)
+    conn = db.get_connection(db_path)
+    SettingsRepo(conn).set_hq_config({
+        "hq_mode": True,
+        "hq_orientation": True,
+        "hq_unwarping": True,
+        "hq_textline": False,
+        "hq_chart": True,
+        "hq_seal": False,
+    })
+    conn.close()
+
+    captured_kwargs = {}
+
+    def fake_ctor(**kwargs):
+        captured_kwargs.update(kwargs)
+        return MagicMock()
+
+    monkeypatch.setattr(sys.modules["paddleocr"], "PPStructureV3", fake_ctor)
+    # Also patch the name already bound in ocr_engine (module-level 'from paddleocr import PPStructureV3')
+    monkeypatch.setattr(ocr_engine, "PPStructureV3", fake_ctor)
+
+    ocr_engine.get_engine(db_path=db_path)
+
+    assert captured_kwargs.get("use_doc_orientation_classify") is True
+    assert captured_kwargs.get("use_doc_unwarping") is True
+    assert captured_kwargs.get("use_textline_orientation") is False
+    assert captured_kwargs.get("use_chart_recognition") is True
+    assert captured_kwargs.get("use_seal_recognition") is False
+    assert captured_kwargs.get("use_table_recognition") is True
+    assert captured_kwargs.get("lang") == "ru"
+
+
