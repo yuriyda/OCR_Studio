@@ -4,7 +4,9 @@
  * Maintenance notes:
  * - mode='onboarding' adds a welcome banner with GPU recommendation; same
  *   model cards / main switch as mode='settings'.
- * - On Apply: opens SSE stream, then PUT /api/settings, then waits for done.
+ * - On Apply: PUT /api/settings FIRST (resets server _reload_state.done → false),
+ *   THEN subscribe to SSE streamReload. This order prevents a race where the SSE
+ *   stream sees a stale done=true from a previous reload before the PUT resets it.
  * - Apply is disabled if queueSize > 0 (passed in by caller).
  * - i18n keys live under settings.* and onboarding.* in i18n/{ru,en}.json.
  * - Named state imports (reset, getSettings, etc.) are convenience re-exports
@@ -148,34 +150,35 @@ function bindEvents(opts: SettingsModalOptions, _recommendation: Recommendation 
     const config = collectConfig();
     setReloadProgress({ loaded: 0, total: 0, current: null });
 
-    const cancelStream = streamReload(
+    // PUT first — this resets server _reload_state.done to false before we subscribe.
+    // If we subscribed first, the SSE stream could immediately receive a stale done=true
+    // from the previous reload, causing the frontend to read stale settings from the server.
+    try {
+      await putSettings(config);
+    } catch {
+      clearReloadProgress();
+      return;
+    }
+
+    closeModal();
+
+    // Server's _reload_state.done is now false — safe to subscribe to the progress stream.
+    streamReload(
       (ev) => {
         if ('loaded' in ev) {
-          setReloadProgress({
-            loaded: ev.loaded, total: ev.total, current: ev.current,
-          });
+          setReloadProgress({ loaded: ev.loaded, total: ev.total, current: ev.current });
         }
       },
       () => {
         clearReloadProgress();
-        const cur = getSettings();
-        if (cur) setSettings({ ...cur, ...config });
         if (opts.mode === 'onboarding') {
           dismissOnboarding().catch(() => {});
-          const updated = getSettings();
-          if (updated) setSettings({ ...updated, onboarding_seen: true });
         }
+        // opts.onApplied (refreshAfterReload) fetches authoritative state from the server —
+        // no local state merge needed here.
         opts.onApplied?.();
       },
     );
-
-    try {
-      await putSettings(config);
-      closeModal();
-    } catch {
-      cancelStream();
-      clearReloadProgress();
-    }
   });
 }
 

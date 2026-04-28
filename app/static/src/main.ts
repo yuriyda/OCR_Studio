@@ -29,6 +29,7 @@ import { initSplitter } from './splitter';
 import { openSettingsModal } from './settings_modal';
 import { showReloadModal, hideReloadModal } from './reload_modal';
 import { renderHqIndicator } from './render';
+import { isAnyHqActive } from './state';
 import type { Document, Project, SystemInfo, ApiLimits, LangCode } from './types';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -517,17 +518,24 @@ function handleDocMenu(docId: string): void {
 async function refreshAfterReload(): Promise<void> {
   const s = await getSettings();
   state.setSettings(s);
-  renderHqIndicator(s.hq_mode);
+  renderHqIndicator(isAnyHqActive(s));
 }
 
 /**
  * Poll state.reloadProgress every 200 ms and drive the reload overlay.
  * The SSE stream (settings_modal.ts) writes to state.setReloadProgress;
  * this watcher just reads and renders.
+ *
+ * Dedup guard: track the last rendered signature so DOM is only rebuilt when
+ * the actual progress values change, preventing visible flicker at 5 fps.
  */
 function watchReloadProgress(): void {
+  let lastReloadSig = '';
   setInterval(() => {
     const p = state.getReloadProgress();
+    const sig = p ? `${p.loaded ?? 'null'}|${p.total}|${p.current ?? 'null'}` : 'none';
+    if (sig === lastReloadSig) return;
+    lastReloadSig = sig;
     if (p) showReloadModal(p); else hideReloadModal();
   }, 200);
 }
@@ -611,7 +619,7 @@ async function boot(): Promise<void> {
   try {
     const settingsResp = await getSettings();
     state.setSettings(settingsResp);
-    renderHqIndicator(settingsResp.hq_mode);
+    renderHqIndicator(isAnyHqActive(settingsResp));
     if (!settingsResp.onboarding_seen) {
       openSettingsModal({ mode: 'onboarding', queueSize: 0, onApplied: refreshAfterReload });
     }

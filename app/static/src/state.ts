@@ -128,3 +128,18 @@ export function setRecommendation(r: Recommendation): void { state.setRecommenda
 export function getReloadProgress(): ReloadProgress | null { return state.getReloadProgress(); }
 export function setReloadProgress(p: ReloadProgress): void { state.setReloadProgress(p); }
 export function clearReloadProgress(): void { state.clearReloadProgress(); }
+
+// ---------------------------------------------------------------------------
+// Pure helpers — placed here because SettingsResponse is already imported,
+// and this module has no DOM/boot side effects (safe to import in unit tests).
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns true if any HQ sub-model (or the master switch) is enabled.
+ * The master hq_mode flag is true only when ALL 5 sub-models are on; using it
+ * alone would show a gray dot when the user activates only some sub-models.
+ */
+export function isAnyHqActive(s: SettingsResponse): boolean {
+  return s.hq_mode || s.hq_orientation || s.hq_unwarping
+    || s.hq_textline || s.hq_chart || s.hq_seal;
+}
