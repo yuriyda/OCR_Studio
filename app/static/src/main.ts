@@ -10,7 +10,7 @@
  */
 
 import './main.css';
-import { api, ApiError } from './api';
+import { api, ApiError, getSettings, reocrDoc, reocrProject } from './api';
 import { state } from './state';
 import { loadLang, applyI18nToDom, t } from './i18n';
 import { renderProjects, INBOX_ID } from './projects';
@@ -26,6 +26,9 @@ import { toast } from './toast';
 import { getCopyText } from './clipboard';
 import { filterBySize, formatTooLargeMessage } from './validation';
 import { initSplitter } from './splitter';
+import { openSettingsModal } from './settings_modal';
+import { showReloadModal, hideReloadModal } from './reload_modal';
+import { renderHqIndicator } from './render';
 import type { Document, Project, SystemInfo, ApiLimits, LangCode } from './types';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -35,7 +38,10 @@ let docsCache: Document[] = [];
 let selectedDocId: string | null = null;
 let resultTab: ResultTabKey = 'markdown';
 let selectedPageIdx = 0;
-let envCache: SystemInfo = { gpu: null, cuda: null, vram_gb: null, engine_lang: null, engine_status: 'idle', engine_pipeline: [] };
+let envCache: SystemInfo = {
+  gpu: null, cuda: null, vram_gb: null, engine_lang: null, engine_status: 'idle', engine_pipeline: [],
+  recommendation: { hq_mode: 'off', reason: '', warning: null },
+};
 let limitsCache: ApiLimits = { max_file_size_bytes: 50 * 1024 * 1024, allowed_extensions: [] };
 const previewPagesCache = new Map<string, string[]>();
 
@@ -69,6 +75,10 @@ async function refreshDocuments(): Promise<void> {
 
 async function refreshSystem(): Promise<void> {
   envCache = await api.getSystemInfo();
+  // Store the GPU-based HQ recommendation so settings_modal can display it.
+  if (envCache.recommendation) {
+    state.setRecommendation(envCache.recommendation);
+  }
   refreshStatusBar();
 }
 
@@ -500,6 +510,76 @@ function handleDocMenu(docId: string): void {
   }]);
 }
 
+/**
+ * Re-read settings from the backend and refresh HQ indicator.
+ * Called after the user applies settings changes (including after engine reload).
+ */
+async function refreshAfterReload(): Promise<void> {
+  const s = await getSettings();
+  state.setSettings(s);
+  renderHqIndicator(s.hq_mode);
+}
+
+/**
+ * Poll state.reloadProgress every 200 ms and drive the reload overlay.
+ * The SSE stream (settings_modal.ts) writes to state.setReloadProgress;
+ * this watcher just reads and renders.
+ */
+function watchReloadProgress(): void {
+  setInterval(() => {
+    const p = state.getReloadProgress();
+    if (p) showReloadModal(p); else hideReloadModal();
+  }, 200);
+}
+
+/**
+ * Delegated click handler for settings / re-OCR actions rendered dynamically
+ * into the DOM (gear icon, re-OCR doc button, re-OCR project button).
+ */
+function bindDynamicActions(): void {
+  document.body.addEventListener('click', async (e) => {
+    const target = e.target as HTMLElement;
+
+    // Gear icon → open settings modal
+    if (target.closest('[data-action="open-settings"]')) {
+      const queueSize = docsCache.filter(
+        (d) => d.status === 'queued' || d.status === 'processing',
+      ).length;
+      openSettingsModal({ mode: 'settings', queueSize, onApplied: refreshAfterReload });
+      return;
+    }
+
+    // Re-OCR single document
+    const reocrDocBtn = target.closest('[data-action="reocr-doc"]') as HTMLElement | null;
+    if (reocrDocBtn) {
+      if (!confirm(t('reocr.confirm_doc'))) return;
+      try {
+        await reocrDoc(reocrDocBtn.dataset.docId!);
+        await refreshDocuments();
+        polling.start();
+      } catch (err) {
+        toast.show((err as Error).message, 'error');
+      }
+      return;
+    }
+
+    // Re-OCR entire project
+    if (target.closest('[data-action="reocr-project"]')) {
+      const doneCount = docsCache.filter((d) => d.status === 'done').length;
+      const msg = t('reocr.confirm_project').replace('{n}', String(doneCount));
+      if (!confirm(msg)) return;
+      try {
+        await reocrProject(state.activeProjectId);
+        await refreshDocuments();
+        polling.start();
+      } catch (err) {
+        toast.show((err as Error).message, 'error');
+      }
+      return;
+    }
+  });
+}
+
 async function boot(): Promise<void> {
   state.load();
   loadLang(state.uiLang);
@@ -517,12 +597,27 @@ async function boot(): Promise<void> {
   );
 
   bindUI();
+  bindDynamicActions();
+  watchReloadProgress();
+
   await refreshSystem();
   await refreshProjects();
   polling.setProject(state.activeProjectId);
   await refreshDocuments();
   polling.start();
   await refreshLimits();
+
+  // Fetch settings and render HQ indicator; show onboarding modal on first run.
+  try {
+    const settingsResp = await getSettings();
+    state.setSettings(settingsResp);
+    renderHqIndicator(settingsResp.hq_mode);
+    if (!settingsResp.onboarding_seen) {
+      openSettingsModal({ mode: 'onboarding', queueSize: 0, onApplied: refreshAfterReload });
+    }
+  } catch {
+    // Settings endpoint unavailable — skip; onboarding will appear on next load.
+  }
 }
 
 boot();

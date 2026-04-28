@@ -58,6 +58,12 @@ export interface PipelineModel {
   name: string;
 }
 
+export interface HqRecommendation {
+  hq_mode: 'on' | 'off';
+  reason: string;
+  warning: string | null;
+}
+
 export interface SystemInfo {
   gpu: string | null;
   cuda: string | null;
@@ -66,6 +72,7 @@ export interface SystemInfo {
   /** Backend returns only 'loading' | 'ready'. 'idle' — frontend-only initial cache value. */
   engine_status: 'ready' | 'loading' | 'idle';
   engine_pipeline: PipelineModel[];
+  recommendation: HqRecommendation;
 }
 
 export interface ApiLimits {
