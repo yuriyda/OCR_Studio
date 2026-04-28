@@ -17,6 +17,7 @@ import { t } from './i18n';
 import { getSettings, getRecommendation, setSettings, setReloadProgress, clearReloadProgress } from './state';
 import type { Recommendation } from './state';
 import { putSettings, dismissOnboarding, streamReload } from './api';
+import { toast } from './toast';
 
 interface ModelEntry {
   key: 'hq_orientation' | 'hq_unwarping' | 'hq_textline' | 'hq_chart' | 'hq_seal';
@@ -165,12 +166,17 @@ function bindEvents(opts: SettingsModalOptions, _recommendation: Recommendation 
     // Server's _reload_state.done is now false — safe to subscribe to the progress stream.
     streamReload(
       (ev) => {
-        if ('loaded' in ev) {
+        if ('loaded' in ev && ev.loaded !== null) {
           setReloadProgress({ loaded: ev.loaded, total: ev.total, current: ev.current });
         }
       },
-      () => {
+      (finalEvent) => {
         clearReloadProgress();
+        // If the engine reload failed (e.g. offline model unavailable), backend reverts settings
+        // to all-false and emits done=true with a non-null error string. Surface it to the user.
+        if (finalEvent && finalEvent.done && finalEvent.error) {
+          toast.show(`${t('reload.error_prefix')}: ${finalEvent.error}`, 'error');
+        }
         if (opts.mode === 'onboarding') {
           dismissOnboarding().catch(() => {});
         }

@@ -179,30 +179,36 @@ export async function reocrProject(projectId: number): Promise<{ requeued: numbe
   return r.json();
 }
 
-/** Shape of events emitted by the /api/settings/reload-stream SSE endpoint. */
+/**
+ * Shape of events emitted by the /api/settings/reload-stream SSE endpoint.
+ * When reload fails, backend emits done=true with a non-null error string (fallback to basic mode).
+ * The loaded/total/current fields are always present regardless of done state.
+ */
 export type ReloadEvent =
-  | { loaded: number; total: number; current: string | null; done: false; error: null }
-  | { done: true; error: string | null };
+  | { loaded: number | null; total: number; current: string | null; done: false; error: null }
+  | { loaded: number | null; total: number; current: string | null; done: true; error: string | null };
 
 /**
  * Open an SSE stream to watch the engine reload progress.
  *
  * @param onEvent  Called for each parsed reload event.
- * @param onClose  Called when the stream closes (done or error).
+ * @param onClose  Called when the stream closes — receives the last event (or null on connection error).
  * @returns        Cleanup function — call it to close the EventSource early.
  */
 export function streamReload(
   onEvent: (ev: ReloadEvent) => void,
-  onClose: () => void,
+  onClose: (finalEvent: ReloadEvent | null) => void,
 ): () => void {
   const es = new EventSource('/api/settings/reload-stream');
+  let lastEvent: ReloadEvent | null = null;
   es.onmessage = (msg) => {
     try {
       const data = JSON.parse(msg.data) as ReloadEvent;
+      lastEvent = data;
       onEvent(data);
       if ((data as { done: boolean }).done) {
         es.close();
-        onClose();
+        onClose(data);
       }
     } catch {
       // malformed SSE payload — skip silently
@@ -210,7 +216,7 @@ export function streamReload(
   };
   es.onerror = () => {
     es.close();
-    onClose();
+    onClose(lastEvent);
   };
   return () => es.close();
 }

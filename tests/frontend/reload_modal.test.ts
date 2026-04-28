@@ -2,7 +2,8 @@
  * reload_modal.test.ts
  *
  * Unit tests for showReloadModal / hideReloadModal.
- * Covers: DOM creation, percent calculation, repeated updates, cleanup.
+ * Covers: DOM creation, percent calculation, repeated updates, cleanup,
+ * DOM identity preservation across calls (no-flicker requirement).
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { showReloadModal, hideReloadModal } from '../../app/static/src/reload_modal';
@@ -73,5 +74,45 @@ describe('reload_modal', () => {
 
   it('hideReloadModal is a no-op when modal was never shown', () => {
     expect(() => hideReloadModal()).not.toThrow();
+  });
+
+  it('DOM element references are the same object across updates (no flicker)', () => {
+    showReloadModal({ loaded: 1, total: 4, current: null });
+    const counterBefore = document.querySelector('[data-reload-counter]');
+    const fillBefore = document.querySelector('[data-reload-fill]');
+    const currentBefore = document.querySelector('[data-reload-current]');
+
+    showReloadModal({ loaded: 3, total: 4, current: 'PP-OCRv4' });
+    const counterAfter = document.querySelector('[data-reload-counter]');
+    const fillAfter = document.querySelector('[data-reload-fill]');
+    const currentAfter = document.querySelector('[data-reload-current]');
+
+    // Same DOM node references — modal was not rebuilt
+    expect(counterAfter).toBe(counterBefore);
+    expect(fillAfter).toBe(fillBefore);
+    expect(currentAfter).toBe(currentBefore);
+  });
+
+  it('updates counter text on second call without rebuilding root', () => {
+    showReloadModal({ loaded: 1, total: 4, current: null });
+    showReloadModal({ loaded: 3, total: 4, current: null });
+    const counter = document.querySelector('[data-reload-counter]') as HTMLElement;
+    // Should show updated loaded count
+    expect(counter.textContent).toContain('3');
+    expect(counter.textContent).toContain('4');
+  });
+
+  it('updates progress fill width on second call', () => {
+    showReloadModal({ loaded: 0, total: 4, current: null });
+    showReloadModal({ loaded: 2, total: 4, current: null });
+    const fill = document.querySelector('[data-reload-fill]') as HTMLElement;
+    expect(fill.style.width).toBe('50%');
+  });
+
+  it('updates current-model text on second call', () => {
+    showReloadModal({ loaded: 1, total: 4, current: null });
+    showReloadModal({ loaded: 2, total: 4, current: 'PP-StructureV3' });
+    const currentEl = document.querySelector('[data-reload-current]') as HTMLElement;
+    expect(currentEl.textContent).toContain('PP-StructureV3');
   });
 });
