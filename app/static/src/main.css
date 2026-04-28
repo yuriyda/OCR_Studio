@@ -8,6 +8,8 @@
  *   — reused in TS modules; renaming requires synchronous edits in .ts/.html files.
  * - Animations (fade-in, toast-in) — only here; do not duplicate in TS.
  */
+@import 'katex/dist/katex.min.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
