@@ -18,7 +18,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    // .js included во время миграции (Tasks 14-26 портируют их в .ts; Task 30 удаляет старые).
+    // .js included during the migration period (Tasks 14-26 ported them to .ts; Task 30 removed the old ones).
     include: ['tests/frontend/**/*.test.{js,ts}'],
     root: __dirname,
   },
