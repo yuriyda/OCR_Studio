@@ -272,7 +272,7 @@ def page_to_markdown(page_result, page_num: int) -> str:
 class _ProgressLogHandler(logging.Handler):
     """Logging handler that parses 'loading <model_name>' lines into progress events.
 
-    Attached to the 'ppocr' and 'paddlex' loggers for the duration of
+    Attached to the 'paddleocr' and 'paddlex' loggers for the duration of
     PPStructureV3(...) construction inside reload_engine_async. Models from
     expected_models that have been already announced are deduplicated via the
     `loaded` set.
@@ -327,8 +327,10 @@ async def reload_engine_async(db_path, on_progress, on_done, on_error) -> None:
     on_done() once the new engine is ready, or on_error(exc) and falls back to
     a basic-mode engine on construction failure.
 
-    Hooks the PaddleOCR loggers ('ppocr' and 'paddlex') with _ProgressLogHandler
+    Hooks the PaddleOCR loggers ('paddleocr' and 'paddlex') with _ProgressLogHandler
     for the duration of construction; handlers are removed in finally.
+    Logger levels are saved before attachment and restored in finally to avoid
+    permanent level mutation.
     """
     global _engine
     import asyncio
@@ -343,7 +345,9 @@ async def reload_engine_async(db_path, on_progress, on_done, on_error) -> None:
     expected = _expected_models_for_config(cfg)
     handler = _ProgressLogHandler(expected, on_progress)
 
-    target_loggers = [logging.getLogger("ppocr"), logging.getLogger("paddlex")]
+    target_loggers = [logging.getLogger("paddleocr"), logging.getLogger("paddlex")]
+    # Save levels before mutating so they can be restored in finally.
+    prev_levels = [(lg, lg.level) for lg in target_loggers]
     for lg in target_loggers:
         lg.addHandler(handler)
         lg.setLevel(logging.INFO)
@@ -363,7 +367,6 @@ async def reload_engine_async(db_path, on_progress, on_done, on_error) -> None:
 
     try:
         await asyncio.to_thread(build)
-        on_done()
     except Exception as exc:
         logger.exception("Engine reload failed; falling back to basic mode")
         try:
@@ -389,9 +392,20 @@ async def reload_engine_async(db_path, on_progress, on_done, on_error) -> None:
         except Exception:
             logger.exception("Basic-mode fallback also failed; engine remains None")
             _engine = None
+    else:
+        # on_done is called only when build() succeeded. Errors from on_done
+        # (e.g. broken SSE socket) must NOT trigger the basic-mode fallback —
+        # the engine itself is fine.
+        try:
+            on_done()
+        except Exception:
+            logger.exception("on_done callback raised; engine still loaded")
     finally:
         for lg in target_loggers:
             lg.removeHandler(handler)
+        # Restore logger levels to prevent permanent level mutation across reloads.
+        for lg, lvl in prev_levels:
+            lg.setLevel(lvl)
 
 
 def process_file(

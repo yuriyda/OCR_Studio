@@ -361,6 +361,92 @@ def test_get_engine_passes_use_flags_from_settings(monkeypatch, tmp_path):
 import logging
 
 
+def test_reload_engine_async_restores_logger_levels(monkeypatch, tmp_path):
+    """Verify reload does not permanently lower paddleocr/paddlex logger levels."""
+    from app import db, ocr_engine
+    from app.settings import SettingsRepo
+    import sys
+    import asyncio
+
+    monkeypatch.setattr(ocr_engine, "_engine", MagicMock())
+
+    db_path = tmp_path / "data.db"
+    db.init(db_path)
+
+    # Set known initial levels (WARNING is higher than INFO, so if restore fails the assert catches it)
+    paddleocr_logger = logging.getLogger("paddleocr")
+    paddlex_logger = logging.getLogger("paddlex")
+    paddleocr_logger.setLevel(logging.WARNING)
+    paddlex_logger.setLevel(logging.WARNING)
+
+    monkeypatch.setattr(sys.modules["paddleocr"], "PPStructureV3", lambda **kw: MagicMock())
+    monkeypatch.setattr(ocr_engine, "PPStructureV3", lambda **kw: MagicMock())
+
+    async def runner():
+        await ocr_engine.reload_engine_async(
+            db_path,
+            on_progress=lambda **kw: None,
+            on_done=lambda: None,
+            on_error=lambda e: None,
+        )
+
+    asyncio.run(runner())
+
+    assert paddleocr_logger.level == logging.WARNING, "paddleocr level should be restored"
+    assert paddlex_logger.level == logging.WARNING, "paddlex level should be restored"
+
+
+def test_reload_engine_async_on_done_failure_does_not_trigger_fallback(monkeypatch, tmp_path):
+    """If on_done() raises, that should NOT trigger basic-mode fallback."""
+    from app import db, ocr_engine
+    from app.settings import SettingsRepo
+    import sys
+    import asyncio
+
+    monkeypatch.setattr(ocr_engine, "_engine", MagicMock())
+
+    db_path = tmp_path / "data.db"
+    db.init(db_path)
+    conn = db.get_connection(db_path)
+    SettingsRepo(conn).set_hq_config({
+        "hq_orientation": True, "hq_unwarping": True,
+        "hq_textline": False, "hq_chart": False, "hq_seal": False,
+        "hq_mode": True,
+    })
+    conn.close()
+
+    ctor_calls = []
+
+    def fake_ctor(**kwargs):
+        ctor_calls.append(kwargs)
+        return MagicMock()
+
+    monkeypatch.setattr(sys.modules["paddleocr"], "PPStructureV3", fake_ctor)
+    monkeypatch.setattr(ocr_engine, "PPStructureV3", fake_ctor)
+
+    on_error_calls = []
+
+    def failing_on_done():
+        raise RuntimeError("simulated SSE write failure")
+
+    async def runner():
+        await ocr_engine.reload_engine_async(
+            db_path,
+            on_progress=lambda **kw: None,
+            on_done=failing_on_done,
+            on_error=lambda e: on_error_calls.append(str(e)),
+        )
+
+    asyncio.run(runner())
+
+    # Engine constructed exactly once — no spurious basic-mode fallback
+    assert len(ctor_calls) == 1, f"expected 1 PPStructureV3 call, got {len(ctor_calls)}"
+    # The HQ flag should still be in the kwargs of the single call
+    assert ctor_calls[0].get("use_doc_orientation_classify") is True
+    # on_error should NOT have been called — the engine reload itself succeeded
+    assert on_error_calls == []
+
+
 def test_progress_log_handler_parses_known_models():
     from app.ocr_engine import _ProgressLogHandler
 
