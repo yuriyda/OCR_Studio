@@ -8,9 +8,13 @@
  * - When InternalState shape changes — BUMP KEY ('ocr-state-v2' → '...-v3') and
  *   add a migration or fallback to defaults.
  * - `state.load()` is ALWAYS called before reading (in `boot()` in main.ts).
+ * - Transient slices (settings, reloadProgress, recommendation) are NOT persisted
+ *   to localStorage — they are fetched fresh from the API on each boot.
+ * - `state.reset()` is provided for tests; it clears ALL transient slices.
  */
 
 import type { LangCode } from './types';
+import type { SettingsResponse } from './api';
 
 export interface SortMode {
   sort: 'created' | 'name' | 'size';
@@ -34,6 +38,26 @@ const DEFAULT: InternalState = {
 };
 
 let internal: InternalState = { ...DEFAULT };
+
+// ---------------------------------------------------------------------------
+// Transient slices — NOT persisted to localStorage
+// ---------------------------------------------------------------------------
+
+export interface ReloadProgress {
+  loaded: number | null;
+  total: number;
+  current: string | null;
+}
+
+export interface Recommendation {
+  hq_mode: 'on' | 'off';
+  reason: string;
+  warning: string | null;
+}
+
+let _settings: SettingsResponse | null = null;
+let _reload: ReloadProgress | null = null;
+let _recommendation: Recommendation | null = null;
 
 function persist(): void {
   try {
@@ -68,4 +92,25 @@ export const state = {
   },
   setUiLang(lang: LangCode): void { internal.uiLang = lang; persist(); },
   setPanelSizes(sizes: [number, number, number]): void { internal.panelSizes = sizes; persist(); },
+
+  // Reset ALL transient slices (used in tests; safe to call in production on logout).
+  reset(): void {
+    _settings = null;
+    _reload = null;
+    _recommendation = null;
+  },
+
+  // Settings slice
+  getSettings(): SettingsResponse | null { return _settings; },
+  setSettings(s: SettingsResponse): void { _settings = s; },
+  isOnboardingSeen(): boolean { return !!_settings?.onboarding_seen; },
+
+  // Reload-progress slice
+  getReloadProgress(): ReloadProgress | null { return _reload; },
+  setReloadProgress(p: ReloadProgress): void { _reload = p; },
+  clearReloadProgress(): void { _reload = null; },
+
+  // Recommendation slice
+  getRecommendation(): Recommendation | null { return _recommendation; },
+  setRecommendation(r: Recommendation): void { _recommendation = r; },
 };
