@@ -595,6 +595,82 @@ async def delete_document(doc_id: str):
         conn.close()
 
 
+# --- Settings + Onboarding ---
+
+from .settings import SettingsRepo as _SettingsRepo, HQ_KEYS as _HQ_KEYS
+
+# Holds the latest reload progress snapshot. New SSE subscribers receive this
+# immediately on connect so a brief network drop doesn't lose the final event.
+_reload_state: dict = {"loaded": 0, "total": 0, "current": None, "done": True, "error": None}
+
+
+@app.get("/api/settings")
+async def get_settings():
+    conn = _conn()
+    try:
+        repo = _SettingsRepo(conn)
+        cfg = repo.get_hq_config()
+        cfg["onboarding_seen"] = repo.is_onboarding_seen()
+        return cfg
+    finally:
+        conn.close()
+
+
+def _processing_doc_ids() -> list[str]:
+    conn = _conn()
+    try:
+        return [d["id"] for d in DocumentRepo(conn).list() if d["status"] == "processing"]
+    finally:
+        conn.close()
+
+
+@app.put("/api/settings")
+async def put_settings(payload: dict = Body(...)):
+    queue_size = task_queue.qsize()
+    processing = _processing_doc_ids()
+    if queue_size > 0 or processing:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "queue_not_empty",
+                "queue_size": queue_size,
+                "processing": processing,
+            },
+        )
+
+    cleaned = {k: bool(v) for k, v in payload.items() if k in _HQ_KEYS}
+
+    conn = _conn()
+    try:
+        _SettingsRepo(conn).set_hq_config(cleaned)
+    finally:
+        conn.close()
+
+    # Reset shared reload state and kick reload off in the background.
+    _reload_state.update({"loaded": 0, "total": 0, "current": None, "done": False, "error": None})
+
+    def _on_progress(loaded, total, current):
+        _reload_state.update({"loaded": loaded, "total": total, "current": current})
+
+    def _on_done():
+        _reload_state.update({"done": True})
+
+    def _on_error(exc):
+        _reload_state.update({"done": True, "error": str(exc)})
+
+    _spawn_bg(ocr_engine.reload_engine_async(DB_PATH, _on_progress, _on_done, _on_error))
+    return {"status": "reloading"}
+
+
+@app.post("/api/settings/onboarding/dismiss", status_code=204)
+async def dismiss_onboarding():
+    conn = _conn()
+    try:
+        _SettingsRepo(conn).mark_onboarding_seen()
+    finally:
+        conn.close()
+
+
 @app.get("/api/system")
 async def system_info():
     from .ocr_engine import _engine, PIPELINE_MODELS

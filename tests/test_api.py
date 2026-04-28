@@ -1081,3 +1081,41 @@ def test_system_info_includes_pipeline_models(client):
     assert len(body["engine_pipeline"]) >= 4  # layout, text_det, text_rec, table, formula
     roles = {m["role"] for m in body["engine_pipeline"]}
     assert {"layout", "text_rec", "table", "formula"}.issubset(roles)
+
+
+# ---------------------------------------------------------------------------
+# Task 7: GET/PUT /api/settings + onboarding dismiss
+# ---------------------------------------------------------------------------
+
+def test_get_settings_returns_defaults(client):
+    resp = client.get("/api/settings")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["hq_mode"] is False
+    assert body["hq_orientation"] is False
+    assert body["onboarding_seen"] is False
+
+
+def test_put_settings_persists(client):
+    new = {"hq_mode": True, "hq_orientation": True, "hq_unwarping": False,
+           "hq_textline": False, "hq_chart": False, "hq_seal": False}
+    resp = client.put("/api/settings", json=new)
+    assert resp.status_code == 200
+    assert resp.json().get("status") == "reloading"
+    body = client.get("/api/settings").json()
+    assert body["hq_orientation"] is True
+
+
+def test_put_settings_blocked_when_queue_not_empty(client, monkeypatch):
+    from app import main
+    monkeypatch.setattr(main.task_queue, "qsize", lambda: 1)
+    resp = client.put("/api/settings", json={"hq_mode": True})
+    assert resp.status_code == 409
+    assert resp.json()["detail"]["error"] == "queue_not_empty"
+
+
+def test_dismiss_onboarding(client):
+    assert client.get("/api/settings").json()["onboarding_seen"] is False
+    resp = client.post("/api/settings/onboarding/dismiss")
+    assert resp.status_code == 204
+    assert client.get("/api/settings").json()["onboarding_seen"] is True
