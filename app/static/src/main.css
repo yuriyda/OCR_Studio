@@ -140,6 +140,23 @@
   background-color: rgba(124, 131, 253, 0.3);
 }
 
+/*
+ * On split.js drag, body.splitting is set. We hide pane content via
+ * visibility:hidden — layout reflow still happens (so sizes are accurate),
+ * but paint is skipped entirely. DevTools Performance trace showed ~5.7 s
+ * of Painting dominated the main thread on a 300+-page markdown when the
+ * right gutter was dragged; visibility:hidden brings that to near-zero.
+ * On release (onDragEnd removes the class), content paints once.
+ *
+ * Targets the inner content of source-large + result-area only — the pane
+ * outlines (and Result tabs / actions toolbar) stay visible so the user
+ * sees the resizing frame in real time.
+ */
+body.splitting #source-large > *,
+body.splitting #result-area > * {
+  visibility: hidden;
+}
+
 @keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }

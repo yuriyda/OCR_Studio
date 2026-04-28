@@ -7,6 +7,10 @@
  * - gutterSize=6 — narrow strip between panes. Styled via main.css.
  * - direction='horizontal' — resize by width. A separate init would be needed for vertical.
  * - cursor='col-resize' — browser shows the correct cursor on hover.
+ * - body.splitting toggle — main.css uses it to hide pane content during drag.
+ *   For huge markdown (300+ pages) repaint dominates the main thread (DevTools
+ *   shows 5+ s of Painting). Hiding content via visibility:hidden cuts paint
+ *   to ~zero while drag is in progress; one repaint happens on release.
  */
 
 import Split from 'split.js';
@@ -24,6 +28,10 @@ export function initSplitter(
     gutterSize: 6,
     direction: 'horizontal',
     cursor: 'col-resize',
-    onDragEnd: (newSizes: number[]) => onResize(newSizes),
+    onDragStart: () => document.body.classList.add('splitting'),
+    onDragEnd: (newSizes: number[]) => {
+      document.body.classList.remove('splitting');
+      onResize(newSizes);
+    },
   });
 }
