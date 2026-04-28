@@ -38,6 +38,7 @@
   "preview.empty": "Выберите документ для просмотра результата",
   "preview.unavailable": "Превью недоступно",
   "preview.source_unavailable": "Источник недоступен — переоцифруй документ для всех форматов",
+  "pane.source": "Исходник",
   "preview.source.empty": "Выберите документ слева",
   "preview.source.loading": "Загрузка превью…",
   "preview.source.rendering": "Рендер превью {current}/{total} страниц",

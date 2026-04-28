@@ -38,6 +38,7 @@
   "preview.empty": "Select a document to view the result",
   "preview.unavailable": "Preview unavailable",
   "preview.source_unavailable": "Source unavailable — re-recognize document to enable all formats",
+  "pane.source": "Source",
   "preview.source.empty": "Select a document on the left",
   "preview.source.loading": "Loading preview…",
   "preview.source.rendering": "Rendering preview {current}/{total} pages",
