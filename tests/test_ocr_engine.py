@@ -510,3 +510,28 @@ def test_reload_engine_async_rebuilds_with_new_config(monkeypatch, tmp_path):
     assert any(ev.get("done") for ev in progress_events)
 
 
+def test_page_to_markdown_wraps_formula_block():
+    """block_label='formula' must be wrapped in $$...$$ delimiters."""
+    from app.ocr_engine import page_to_markdown
+
+    fake_result = MagicMock()
+    fake_result.json = {
+        "res": {
+            "parsing_res_list": [
+                {"block_label": "paragraph_title", "block_content": "Theorem 1",
+                 "block_bbox": [0, 0, 100, 20]},
+                {"block_label": "formula", "block_content": "\\frac{x^2}{y}",
+                 "block_bbox": [0, 30, 100, 60]},
+                {"block_label": "text", "block_content": "Therefore...",
+                 "block_bbox": [0, 70, 100, 90]},
+            ],
+            "table_res_list": [],
+        }
+    }
+
+    md = page_to_markdown(fake_result, page_num=1)
+    assert "$$\n\\frac{x^2}{y}\n$$" in md
+    assert "#### Theorem 1" in md
+    assert "Therefore..." in md
+
+

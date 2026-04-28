@@ -262,6 +262,9 @@ def page_to_markdown(page_result, page_num: int) -> str:
             parts.append(f"### {content}\n")
         elif label == "paragraph_title":
             parts.append(f"#### {content}\n")
+        elif label == "formula":
+            # PP-FormulaNet outputs LaTeX; wrap as block math for KaTeX.
+            parts.append(f"$$\n{content}\n$$\n")
         else:
             parts.append(content)
             parts.append("")
