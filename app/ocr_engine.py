@@ -269,6 +269,131 @@ def page_to_markdown(page_result, page_num: int) -> str:
     return "\n".join(parts)
 
 
+class _ProgressLogHandler(logging.Handler):
+    """Logging handler that parses 'loading <model_name>' lines into progress events.
+
+    Attached to the 'ppocr' and 'paddlex' loggers for the duration of
+    PPStructureV3(...) construction inside reload_engine_async. Models from
+    expected_models that have been already announced are deduplicated via the
+    `loaded` set.
+    """
+
+    def __init__(self, expected_models: list[str], on_progress) -> None:
+        super().__init__()
+        self.expected = expected_models
+        self.loaded: set[str] = set()
+        self.on_progress = on_progress
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            msg = record.getMessage()
+        except Exception:
+            return
+        for model in self.expected:
+            if model in msg and model not in self.loaded:
+                self.loaded.add(model)
+                try:
+                    self.on_progress(
+                        loaded=len(self.loaded),
+                        total=len(self.expected),
+                        current=model,
+                    )
+                except Exception:
+                    pass  # callback errors must not break OCR setup
+                break
+
+
+def _expected_models_for_config(cfg: dict[str, bool]) -> list[str]:
+    """Return the list of model names expected to load given the HQ config."""
+    base = [m["name"] for m in PIPELINE_MODELS if not m.get("optional")]
+    optional_role_to_flag = {
+        "orientation": "hq_orientation",
+        "unwarping": "hq_unwarping",
+        "textline": "hq_textline",
+        "chart": "hq_chart",
+        "seal": "hq_seal",
+    }
+    optional = [
+        m["name"] for m in PIPELINE_MODELS
+        if m.get("optional") and cfg.get(optional_role_to_flag.get(m["role"], ""), False)
+    ]
+    return base + optional
+
+
+async def reload_engine_async(db_path, on_progress, on_done, on_error) -> None:
+    """Destroy the current engine and rebuild it under the current settings.
+
+    Streams per-model progress via on_progress(loaded, total, current). Calls
+    on_done() once the new engine is ready, or on_error(exc) and falls back to
+    a basic-mode engine on construction failure.
+
+    Hooks the PaddleOCR loggers ('ppocr' and 'paddlex') with _ProgressLogHandler
+    for the duration of construction; handlers are removed in finally.
+    """
+    global _engine
+    import asyncio
+    from . import db, settings as settings_mod
+
+    conn = db.get_connection(db_path)
+    try:
+        cfg = settings_mod.SettingsRepo(conn).get_hq_config()
+    finally:
+        conn.close()
+
+    expected = _expected_models_for_config(cfg)
+    handler = _ProgressLogHandler(expected, on_progress)
+
+    target_loggers = [logging.getLogger("ppocr"), logging.getLogger("paddlex")]
+    for lg in target_loggers:
+        lg.addHandler(handler)
+        lg.setLevel(logging.INFO)
+
+    def build():
+        global _engine
+        _engine = None  # release VRAM via GC
+        _engine = PPStructureV3(
+            use_table_recognition=True,
+            use_doc_orientation_classify=cfg["hq_orientation"],
+            use_doc_unwarping=cfg["hq_unwarping"],
+            use_textline_orientation=cfg["hq_textline"],
+            use_chart_recognition=cfg["hq_chart"],
+            use_seal_recognition=cfg["hq_seal"],
+            lang='ru',
+        )
+
+    try:
+        await asyncio.to_thread(build)
+        on_done()
+    except Exception as exc:
+        logger.exception("Engine reload failed; falling back to basic mode")
+        try:
+            on_error(exc)
+        except Exception:
+            pass
+        # Fallback: rebuild with basic config and revert settings to basic
+        try:
+            conn2 = db.get_connection(db_path)
+            try:
+                settings_mod.SettingsRepo(conn2).set_hq_config(
+                    {k: False for k in settings_mod.HQ_KEYS}
+                )
+            finally:
+                conn2.close()
+
+            def build_basic():
+                global _engine
+                _engine = None
+                _engine = PPStructureV3(use_table_recognition=True, lang='ru')
+
+            await asyncio.to_thread(build_basic)
+        except Exception:
+            logger.exception("Basic-mode fallback also failed; engine remains None")
+            _engine = None
+    finally:
+        for lg in target_loggers:
+            lg.removeHandler(handler)
+
+
 def process_file(
     file_path: str,
     progress_callback=None,

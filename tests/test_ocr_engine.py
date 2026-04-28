@@ -358,3 +358,69 @@ def test_get_engine_passes_use_flags_from_settings(monkeypatch, tmp_path):
     assert captured_kwargs.get("lang") == "ru"
 
 
+import logging
+
+
+def test_progress_log_handler_parses_known_models():
+    from app.ocr_engine import _ProgressLogHandler
+
+    seen = []
+    handler = _ProgressLogHandler(
+        expected_models=["PicoDet-S_layout_3cls", "PP-OCRv5_server_det"],
+        on_progress=lambda **kw: seen.append(kw),
+    )
+    logger = logging.getLogger("test_progress_handler")
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+
+    logger.info("loading PicoDet-S_layout_3cls weights")
+    logger.info("loading PP-OCRv5_server_det from cache")
+    logger.info("loading PicoDet-S_layout_3cls again")  # duplicate, should not fire
+
+    logger.removeHandler(handler)
+
+    assert len(seen) == 2
+    assert seen[0] == {"loaded": 1, "total": 2, "current": "PicoDet-S_layout_3cls"}
+    assert seen[1] == {"loaded": 2, "total": 2, "current": "PP-OCRv5_server_det"}
+
+
+def test_reload_engine_async_rebuilds_with_new_config(monkeypatch, tmp_path):
+    from app import db, ocr_engine
+    from app.settings import SettingsRepo
+    import sys
+    import asyncio
+
+    monkeypatch.setattr(ocr_engine, "_engine", MagicMock())  # pre-existing engine
+
+    db_path = tmp_path / "data.db"
+    db.init(db_path)
+    conn = db.get_connection(db_path)
+    SettingsRepo(conn).set_hq_config({
+        "hq_mode": True, "hq_orientation": True, "hq_unwarping": False,
+        "hq_textline": False, "hq_chart": False, "hq_seal": False,
+    })
+    conn.close()
+
+    captured = {}
+
+    def fake_ctor(**kwargs):
+        captured.update(kwargs)
+        return MagicMock()
+
+    monkeypatch.setattr(sys.modules["paddleocr"], "PPStructureV3", fake_ctor)
+    monkeypatch.setattr(ocr_engine, "PPStructureV3", fake_ctor)
+
+    progress_events = []
+    async def runner():
+        await ocr_engine.reload_engine_async(
+            db_path,
+            on_progress=lambda **kw: progress_events.append(kw),
+            on_done=lambda: progress_events.append({"done": True}),
+            on_error=lambda e: progress_events.append({"error": str(e)}),
+        )
+
+    asyncio.run(runner())
+    assert captured.get("use_doc_orientation_classify") is True
+    assert any(ev.get("done") for ev in progress_events)
+
+
