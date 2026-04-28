@@ -60,12 +60,17 @@ export function renderDocuments(
     const menuClass = d.status === 'processing'
       ? 'doc-menu cursor-pointer text-text-muted px-1 disabled opacity-30'
       : 'doc-menu cursor-pointer text-text-muted px-1';
+    // Re-OCR button only for finished documents
+    const reOcrBtn = d.status === 'done'
+      ? `<button class="text-text-muted px-1 text-xs leading-none" data-action="reocr-doc" data-doc-id="${escHtml(d.id)}" title="${escHtml(t('reocr.doc_button_title'))}">↻</button>`
+      : '';
     return `
       <div class="doc-item ${active}" data-id="${escHtml(d.id)}" draggable="true">
         <span>${iconForFilename(d.filename)}</span>
         <span class="flex-1 truncate">${escHtml(d.filename)}</span>
         <span class="text-xs text-text-muted whitespace-nowrap">${formatBytes(d.size_bytes)}</span>
         ${progressMarkup(d)}
+        ${reOcrBtn}
         <span class="${menuClass}">⋯</span>
       </div>`;
   }).join('');

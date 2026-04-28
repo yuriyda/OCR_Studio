@@ -14,6 +14,7 @@
 
 import type { Document } from './types';
 import { t } from './i18n';
+import { renderLatex } from './latex';
 
 export type ResultTabKey = 'markdown' | 'preview' | 'text';
 
@@ -100,6 +101,8 @@ export async function renderResult(
     } else if (tab === 'preview') {
       const html = await api.getRendered(doc.id, 'md');
       container.innerHTML = `<div class="rendered prose prose-invert max-w-none">${html}</div>`;
+      // Render LaTeX formulas ($$...$$) after HTML is in DOM
+      renderLatex(container);
     }
   } catch {
     container.innerHTML = `<div class="text-error text-center py-10">${t('preview.unavailable')}</div>`;
