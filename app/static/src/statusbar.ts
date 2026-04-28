@@ -34,7 +34,7 @@ export function renderStatusBar(container: HTMLElement, data: StatusBarData): vo
   const engineLabel = data.engine.status === 'loading' || data.engine.status === 'idle'
     ? t('statusbar.engine_loading')
     : t('statusbar.engine_ready');
-  const envParts = [data.env.gpu, data.env.vram_gb !== null ? `${data.env.vram_gb} ГБ` : null]
+  const envParts = [data.env.gpu, data.env.vram_gb !== null ? `${data.env.vram_gb} ${t('units.gb')}` : null]
     .filter(Boolean) as string[];
   const env = envParts.join(' · ');
   const cuda = data.env.cuda ? `CUDA ${escHtml(data.env.cuda)}` : '';

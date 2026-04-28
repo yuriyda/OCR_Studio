@@ -4,10 +4,14 @@
  * Maintenance notes:
  * - When adding a new file type (e.g. a .docx source) — add to IMAGE_EXT
  *   or create a new Set and add a branch in iconForFilename.
- * - formatBytes uses RU units (Б/КБ/МБ/ГБ). Do not add English variants —
- *   this is not an i18n table; the units are dimensionless and universal.
- * - No dependencies on other modules (icons.ts is a leaf utility).
+ * - formatBytes is i18n-aware: unit suffix (B/KB/MB/GB vs Б/КБ/МБ/ГБ) comes
+ *   from the active locale via t('units.*'). Unit thresholds are universal
+ *   (binary 1024-step), only the suffix label is localised.
+ * - The single dependency on i18n is a runtime call; no circular import risk
+ *   because i18n.ts only imports from types.ts.
  */
+
+import { t } from './i18n';
 
 const PDF_EXT = new Set(['pdf']);
 const IMAGE_EXT = new Set(['png', 'jpg', 'jpeg', 'bmp', 'tiff', 'tif', 'webp', 'gif']);
@@ -22,8 +26,8 @@ export function iconForFilename(filename: string): string {
 }
 
 export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} Б`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} ГБ`;
+  if (bytes < 1024) return `${bytes} ${t('units.bytes')}`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} ${t('units.kb')}`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} ${t('units.mb')}`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} ${t('units.gb')}`;
 }

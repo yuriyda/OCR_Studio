@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { iconForFilename, formatBytes } from '../../app/static/src/icons';
+import { loadLang } from '../../app/static/src/i18n';
 
 describe('iconForFilename', () => {
   it('returns 📕 for pdf', () => expect(iconForFilename('a.pdf')).toBe('📕'));
@@ -13,7 +14,9 @@ describe('iconForFilename', () => {
   it('returns 📄 for no extension', () => expect(iconForFilename('readme')).toBe('📄'));
 });
 
-describe('formatBytes', () => {
+describe('formatBytes (RU locale)', () => {
+  beforeEach(() => loadLang('ru'));
+
   it('formats bytes', () => expect(formatBytes(500)).toBe('500 Б'));
   it('formats KB', () => expect(formatBytes(1500)).toBe('1.5 КБ'));
   it('formats MB', () => expect(formatBytes(2_500_000)).toBe('2.4 МБ'));
@@ -21,4 +24,15 @@ describe('formatBytes', () => {
   it('handles 0', () => expect(formatBytes(0)).toBe('0 Б'));
   it('handles boundary 1023 → bytes', () => expect(formatBytes(1023)).toBe('1023 Б'));
   it('handles boundary 1024 → KB', () => expect(formatBytes(1024)).toBe('1.0 КБ'));
+});
+
+describe('formatBytes (EN locale)', () => {
+  beforeEach(() => loadLang('en'));
+
+  it('formats bytes', () => expect(formatBytes(500)).toBe('500 B'));
+  it('formats KB', () => expect(formatBytes(1500)).toBe('1.5 KB'));
+  it('formats MB', () => expect(formatBytes(2_500_000)).toBe('2.4 MB'));
+  it('formats GB', () => expect(formatBytes(3_000_000_000)).toBe('2.8 GB'));
+  it('handles 0', () => expect(formatBytes(0)).toBe('0 B'));
+  it('handles boundary 1024 → KB', () => expect(formatBytes(1024)).toBe('1.0 KB'));
 });
