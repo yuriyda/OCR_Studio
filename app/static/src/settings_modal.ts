@@ -4,7 +4,7 @@
  * Maintenance notes:
  * - mode='onboarding' adds a welcome banner with GPU recommendation; same
  *   model cards / main switch as mode='settings'.
- * - On Apply: calls PUT /api/settings, then opens SSE stream to track reload.
+ * - On Apply: opens SSE stream, then PUT /api/settings, then waits for done.
  * - Apply is disabled if queueSize > 0 (passed in by caller).
  * - i18n keys live under settings.* and onboarding.* in i18n/{ru,en}.json.
  * - Named state imports (reset, getSettings, etc.) are convenience re-exports
@@ -148,7 +148,7 @@ function bindEvents(opts: SettingsModalOptions, _recommendation: Recommendation 
     const config = collectConfig();
     setReloadProgress({ loaded: 0, total: 0, current: null });
 
-    streamReload(
+    const cancelStream = streamReload(
       (ev) => {
         if ('loaded' in ev) {
           setReloadProgress({
@@ -173,6 +173,7 @@ function bindEvents(opts: SettingsModalOptions, _recommendation: Recommendation 
       await putSettings(config);
       closeModal();
     } catch {
+      cancelStream();
       clearReloadProgress();
     }
   });
