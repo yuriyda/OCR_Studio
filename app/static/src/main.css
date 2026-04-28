@@ -107,6 +107,37 @@
   }
   .source-thumb:hover { @apply border-accent; }
   .thumb-page-active { @apply border-accent shadow-neon; }
+
+}
+
+/*
+ * split.js injects <div class="gutter gutter-horizontal"> between panes at
+ * runtime. Tailwind's content scanner cannot see these classes (they are not
+ * in any .ts/.html file), so this block lives OUTSIDE @layer components to
+ * survive PurgeCSS.
+ *
+ * Without these styles the gutter is invisible — user cannot find the drag
+ * handle. Visible accent-tinted strip + brighter hover/active states + a
+ * vertical dots "grip" pattern in the centre.
+ */
+.gutter {
+  background-color: rgba(255, 255, 255, 0.04);
+  background-repeat: no-repeat;
+  background-position: 50%;
+  transition: background-color 0.15s;
+}
+.gutter.gutter-horizontal {
+  cursor: col-resize;
+  background-image: radial-gradient(
+    circle, rgba(124, 131, 253, 0.6) 1px, transparent 1.5px
+  );
+  background-size: 4px 8px;
+}
+.gutter.gutter-horizontal:hover {
+  background-color: rgba(124, 131, 253, 0.15);
+}
+.gutter.gutter-horizontal:active {
+  background-color: rgba(124, 131, 253, 0.3);
 }
 
 @keyframes fade-in {
