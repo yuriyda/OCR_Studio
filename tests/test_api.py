@@ -1119,3 +1119,20 @@ def test_dismiss_onboarding(client):
     resp = client.post("/api/settings/onboarding/dismiss")
     assert resp.status_code == 204
     assert client.get("/api/settings").json()["onboarding_seen"] is True
+
+
+def test_reload_stream_emits_done_event(client):
+    """SSE stream must emit at least one event with 'done' marker."""
+    from app import main
+
+    # Force reload-state to indicate completion before request
+    main._reload_state.update({"done": True, "loaded": 10, "total": 10, "current": "x"})
+
+    with client.stream("GET", "/api/settings/reload-stream") as resp:
+        assert resp.status_code == 200
+        first_chunk = ""
+        for line in resp.iter_lines():
+            first_chunk += line
+            if "done" in first_chunk:
+                break
+        assert "done" in first_chunk

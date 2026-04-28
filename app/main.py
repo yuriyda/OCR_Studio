@@ -671,6 +671,36 @@ async def dismiss_onboarding():
         conn.close()
 
 
+@app.get("/api/settings/reload-stream")
+async def settings_reload_stream():
+    """Server-Sent Events stream of engine-reload progress.
+
+    On connect, immediately emits the current snapshot so a fresh subscriber
+    after a network drop doesn't miss the final event. Closes the stream once
+    the snapshot is in a terminal state (done=True) for two consecutive ticks.
+    """
+    from fastapi.responses import StreamingResponse
+    import json
+
+    async def event_gen():
+        # Initial snapshot — sent immediately on connect
+        yield f"data: {json.dumps(_reload_state)}\n\n"
+        last_sent = dict(_reload_state)
+        terminal_ticks = 0
+        while True:
+            await asyncio.sleep(0.25)
+            current = dict(_reload_state)
+            if current != last_sent:
+                yield f"data: {json.dumps(current)}\n\n"
+                last_sent = current
+            if current.get("done"):
+                terminal_ticks += 1
+                if terminal_ticks >= 2:
+                    break
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
 @app.get("/api/system")
 async def system_info():
     from .ocr_engine import _engine, PIPELINE_MODELS
