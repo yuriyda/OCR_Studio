@@ -198,3 +198,63 @@ describe('api client', () => {
     expect(err.name).toBe('ApiError');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Settings / reload / re-OCR named exports
+// ---------------------------------------------------------------------------
+import * as apiNs from '../../app/static/src/api';
+
+describe('settings api', () => {
+  beforeEach(() => {
+    global.fetch = vi.fn();
+  });
+
+  it('getSettings GETs /api/settings', async () => {
+    (global.fetch as any).mockResolvedValue({
+      ok: true,
+      json: async () => ({ hq_mode: false, hq_orientation: false, onboarding_seen: false }),
+    });
+    const cfg = await apiNs.getSettings();
+    expect(global.fetch).toHaveBeenCalledWith('/api/settings');
+    expect(cfg.hq_mode).toBe(false);
+  });
+
+  it('putSettings PUTs JSON body', async () => {
+    (global.fetch as any).mockResolvedValue({
+      ok: true,
+      json: async () => ({ status: 'reloading' }),
+    });
+    await apiNs.putSettings({ hq_mode: true, hq_orientation: true } as any);
+    const [url, opts] = (global.fetch as any).mock.calls[0];
+    expect(url).toBe('/api/settings');
+    expect(opts.method).toBe('PUT');
+    expect(JSON.parse(opts.body).hq_mode).toBe(true);
+  });
+
+  it('dismissOnboarding POSTs to dismiss', async () => {
+    (global.fetch as any).mockResolvedValue({ ok: true, status: 204, json: async () => ({}) });
+    await apiNs.dismissOnboarding();
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/api/settings/onboarding/dismiss',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('reocrDoc POSTs to /api/documents/{id}/reocr', async () => {
+    (global.fetch as any).mockResolvedValue({ ok: true, json: async () => ({}) });
+    await apiNs.reocrDoc('abc');
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/api/documents/abc/reocr',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('reocrProject POSTs to /api/projects/{id}/reocr', async () => {
+    (global.fetch as any).mockResolvedValue({ ok: true, json: async () => ({}) });
+    await apiNs.reocrProject(7);
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/api/projects/7/reocr',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+});

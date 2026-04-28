@@ -119,3 +119,98 @@ export const api = {
   resultUrl(docId: string, format: OcrFormat): string { return `/api/result/${docId}?format=${format}`; },
   projectZipUrl(projectId: number): string { return `/api/projects/${projectId}/zip`; },
 };
+
+// ---------------------------------------------------------------------------
+// Settings / reload / re-OCR — named exports used by settings UI components
+// ---------------------------------------------------------------------------
+
+export interface HqConfig {
+  hq_mode: boolean;
+  hq_orientation: boolean;
+  hq_unwarping: boolean;
+  hq_textline: boolean;
+  hq_chart: boolean;
+  hq_seal: boolean;
+}
+
+export interface SettingsResponse extends HqConfig {
+  onboarding_seen: boolean;
+}
+
+/** Fetch current HQ-mode settings from the backend. */
+export async function getSettings(): Promise<SettingsResponse> {
+  const r = await fetch('/api/settings');
+  if (!r.ok) throw new ApiError(`getSettings failed`, r.status);
+  return r.json();
+}
+
+/** Persist updated settings; backend may respond with { status: 'reloading' } when engine restarts. */
+export async function putSettings(config: Partial<HqConfig>): Promise<{ status: string }> {
+  const r = await fetch('/api/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+  if (!r.ok) {
+    let detail: Record<string, unknown> = {};
+    try { detail = await r.json(); } catch { /* non-JSON body */ }
+    throw Object.assign(new ApiError(`putSettings ${r.status}`, r.status), { detail });
+  }
+  return r.json();
+}
+
+/** Mark onboarding banner as dismissed (POST, no body). */
+export async function dismissOnboarding(): Promise<void> {
+  const r = await fetch('/api/settings/onboarding/dismiss', { method: 'POST' });
+  if (!r.ok) throw new ApiError(`dismissOnboarding failed`, r.status);
+}
+
+/** Re-queue a single document for OCR. */
+export async function reocrDoc(docId: string): Promise<unknown> {
+  const r = await fetch(`/api/documents/${docId}/reocr`, { method: 'POST' });
+  if (!r.ok) throw new ApiError(`reocrDoc failed`, r.status);
+  return r.json();
+}
+
+/** Re-queue all documents in a project for OCR. Returns number of re-queued docs. */
+export async function reocrProject(projectId: number): Promise<{ requeued: number; doc_ids: string[] }> {
+  const r = await fetch(`/api/projects/${projectId}/reocr`, { method: 'POST' });
+  if (!r.ok) throw new ApiError(`reocrProject failed`, r.status);
+  return r.json();
+}
+
+/** Shape of events emitted by the /api/settings/reload-stream SSE endpoint. */
+export type ReloadEvent =
+  | { loaded: number; total: number; current: string | null; done: false; error: null }
+  | { done: true; error: string | null };
+
+/**
+ * Open an SSE stream to watch the engine reload progress.
+ *
+ * @param onEvent  Called for each parsed reload event.
+ * @param onClose  Called when the stream closes (done or error).
+ * @returns        Cleanup function — call it to close the EventSource early.
+ */
+export function streamReload(
+  onEvent: (ev: ReloadEvent) => void,
+  onClose: () => void,
+): () => void {
+  const es = new EventSource('/api/settings/reload-stream');
+  es.onmessage = (msg) => {
+    try {
+      const data = JSON.parse(msg.data) as ReloadEvent;
+      onEvent(data);
+      if ((data as { done: boolean }).done) {
+        es.close();
+        onClose();
+      }
+    } catch {
+      // malformed SSE payload — skip silently
+    }
+  };
+  es.onerror = () => {
+    es.close();
+    onClose();
+  };
+  return () => es.close();
+}
