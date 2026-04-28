@@ -168,6 +168,37 @@ def test_html_to_docx_table_uneven_rows_padded():
     assert t.rows[1].cells[0].text == "x"
 
 
+def test_md_to_docx_replaces_block_formula_with_placeholder():
+    """Block formulas must become inline `[formula: ...]` text in DOCX."""
+    from app.converters import md_to_docx
+    from io import BytesIO
+    from docx import Document
+
+    md = (
+        "Equation derivation:\n\n"
+        "$$\n\\frac{x^2}{y}\n$$\n\n"
+        "And the result is."
+    )
+    blob = md_to_docx(md)
+    doc = Document(BytesIO(blob))
+    full_text = "\n".join(p.text for p in doc.paragraphs)
+    assert "[formula: \\frac{x^2}{y}]" in full_text
+    assert "Equation derivation:" in full_text
+    assert "And the result is." in full_text
+
+
+def test_md_to_docx_preserves_text_around_formulas():
+    from app.converters import md_to_docx
+    from io import BytesIO
+    from docx import Document
+    md = "Start.\n\n$$\nE=mc^2\n$$\n\nEnd."
+    blob = md_to_docx(md)
+    doc = Document(BytesIO(blob))
+    text = "\n".join(p.text for p in doc.paragraphs)
+    assert "Start." in text and "End." in text
+    assert "[formula: E=mc^2]" in text
+
+
 def test_md_to_docx_full_document_smoke():
     md = (
         "# Title\n"

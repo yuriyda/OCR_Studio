@@ -19,6 +19,20 @@ from docx.shared import Pt
 
 from . import preview as _preview
 
+_FORMULA_BLOCK_RE = re.compile(r'\$\$\s*\n?(.+?)\n?\s*\$\$', re.DOTALL)
+
+
+def _flatten_formulas(md: str) -> str:
+    """Replace block math `$$...$$` with backtick-wrapped `[formula: ...]` placeholders.
+
+    Preserves LaTeX source verbatim so users can copy it into Equation Editor.
+    Backticks make the placeholder render in monospace via the existing code-walker.
+    """
+    return _FORMULA_BLOCK_RE.sub(
+        lambda m: f"`[formula: {m.group(1).strip()}]`",
+        md,
+    )
+
 
 def md_to_txt(md: str) -> str:
     """Strip markdown formatting, keep tables as plain text."""
@@ -153,7 +167,9 @@ def _walk_inline(para, node):
 def md_to_docx(md: str) -> bytes:
     """Convert markdown to a .docx file. Returns bytes.
 
-    Delegates: markdown → HTML (preview.markdown_to_html) → docx (html_to_docx).
+    Pipeline: _flatten_formulas → markdown → HTML (preview.markdown_to_html) → docx (html_to_docx).
+    Block math `$$...$$` is replaced with monospace placeholders before HTML rendering.
     """
-    html = _preview.markdown_to_html(md or "")
+    md = _flatten_formulas(md or "")
+    html = _preview.markdown_to_html(md)
     return html_to_docx(html)
