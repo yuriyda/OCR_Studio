@@ -18,6 +18,38 @@
     font-family: -apple-system, system-ui, 'Segoe UI', sans-serif;
   }
   * { box-sizing: border-box; }
+
+  /*
+   * Custom scrollbars matching the Glass+Neon dark palette.
+   * Firefox uses scrollbar-* shorthand; WebKit/Blink uses pseudo-elements.
+   * Thumb color = accent at low alpha; hover = brighter; track = transparent.
+   */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(124, 131, 253, 0.35) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: rgba(124, 131, 253, 0.35);
+    border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(124, 131, 253, 0.6);
+  }
+  *::-webkit-scrollbar-thumb:active {
+    background-color: rgba(124, 131, 253, 0.8);
+  }
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
 }
 
 @layer components {
