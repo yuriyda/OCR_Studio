@@ -114,3 +114,17 @@ export const state = {
   getRecommendation(): Recommendation | null { return _recommendation; },
   setRecommendation(r: Recommendation): void { _recommendation = r; },
 };
+
+// ---------------------------------------------------------------------------
+// Named convenience exports — allow `import * as state from './state'` in
+// components/tests and call state.reset(), state.setSettings(), etc. directly.
+// These delegate to the `state` object so there is a single source of truth.
+// ---------------------------------------------------------------------------
+export function reset(): void { state.reset(); }
+export function getSettings(): SettingsResponse | null { return state.getSettings(); }
+export function setSettings(s: SettingsResponse): void { state.setSettings(s); }
+export function getRecommendation(): Recommendation | null { return state.getRecommendation(); }
+export function setRecommendation(r: Recommendation): void { state.setRecommendation(r); }
+export function getReloadProgress(): ReloadProgress | null { return state.getReloadProgress(); }
+export function setReloadProgress(p: ReloadProgress): void { state.setReloadProgress(p); }
+export function clearReloadProgress(): void { state.clearReloadProgress(); }
