@@ -1,4 +1,4 @@
-"""Тесты для app/system.py."""
+"""Tests for app/system.py."""
 from unittest.mock import patch
 from app import system
 

@@ -1,12 +1,12 @@
 /**
- * Mapping расширений файлов на эмодзи-иконки + хелпер форматирования размеров в байтах.
+ * Map file extensions to emoji icons + helper for formatting sizes in bytes.
  *
- * Редактирование:
- * - При добавлении нового типа файла (например, .docx исходник) — добавь в IMAGE_EXT
- *   или создай новый Set, добавь ветку в iconForFilename.
- * - formatBytes использует RU единицы (Б/КБ/МБ/ГБ). Не добавлять английские варианты —
- *   это не i18n-таблица, единицы безразмерны и общие.
- * - Не зависеть от других модулей (icons.ts — leaf utility).
+ * Maintenance notes:
+ * - When adding a new file type (e.g. a .docx source) — add to IMAGE_EXT
+ *   or create a new Set and add a branch in iconForFilename.
+ * - formatBytes uses RU units (Б/КБ/МБ/ГБ). Do not add English variants —
+ *   this is not an i18n table; the units are dimensionless and universal.
+ * - No dependencies on other modules (icons.ts is a leaf utility).
  */
 
 const PDF_EXT = new Set(['pdf']);

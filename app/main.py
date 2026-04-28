@@ -1,11 +1,11 @@
 """
 FastAPI OCR web service.
 
-Редактирование:
-- Состояние документов и проектов — только через app.storage (ProjectRepo, DocumentRepo).
-- Файлы — только через app.files.
-- Никаких глобальных in-memory dicts для задач.
-- Очередь — только doc_id (str), восстанавливается из БД при старте.
+Maintenance notes:
+- Document and project state must only go through app.storage (ProjectRepo, DocumentRepo).
+- File operations must only go through app.files.
+- No global in-memory dicts for tasks.
+- The queue holds only doc_id (str); restored from the database on startup.
 """
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ PAGE_WARNING_THRESHOLD = 50
 
 
 def _pdf_page_count(file_path: str) -> int:
-    """Количество страниц в PDF через PyMuPDF. Возвращает 0 при ошибке."""
+    """Return the page count of a PDF via PyMuPDF. Returns 0 on error."""
     try:
         import fitz
         with fitz.open(file_path) as doc:
@@ -51,15 +51,15 @@ _DIST_DIR = _STATIC_DIR / "dist"
 
 task_queue: asyncio.Queue = asyncio.Queue()
 
-# Удерживаем ссылки на background-таски, чтобы GC не собрал их преждевременно.
+# Hold references to background tasks so GC does not collect them prematurely.
 # Python docs: "Save a reference to the result of asyncio.create_task() to avoid
-# a task disappearing mid-execution." Tasks автоматически удаляются из set по
-# завершении через done_callback.
+# a task disappearing mid-execution." Tasks are removed from the set automatically
+# on completion via done_callback.
 _background_tasks: set[asyncio.Task] = set()
 
 
 def _spawn_bg(coro) -> asyncio.Task:
-    """Создать background-таск и удержать ссылку до его завершения."""
+    """Create a background task and hold a reference until it completes."""
     task = asyncio.create_task(coro)
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
@@ -85,7 +85,7 @@ async def lifespan(app: FastAPI):
     _spawn_bg(orphan_cleanup_loop())
     asyncio.get_running_loop().run_in_executor(None, ocr_engine.get_engine)
     yield
-    # Shutdown — worker и cleanup_loop падают вместе с процессом
+    # Shutdown — worker and cleanup_loop exit together with the process
 
 
 app = FastAPI(title="OCR Service", lifespan=lifespan)
@@ -116,7 +116,7 @@ async def worker():
             try:
                 original = files.original_path(DATA_DIR, doc_id)
 
-                # Engine может быть ещё не загружен (~30s). Помечаем stage до синхронной загрузки.
+                # Engine may not be loaded yet (~30 s). Mark stage before the blocking load call.
                 if ocr_engine._engine is None:
                     doc_repo.update(doc_id, stage="engine_loading", stage_updated_at=_now_iso())
                     await asyncio.to_thread(ocr_engine.get_engine)
@@ -156,8 +156,8 @@ async def worker():
                     _progress,
                     _stage,
                 )
-                # ВСЕГДА сохраняем result.md как canonical source.
-                # TXT и DOCX генерируются лениво при первом запросе через
+                # ALWAYS save result.md as the canonical source.
+                # TXT and DOCX are generated lazily on first request via
                 # /api/result|markdown|rendered/{id}?format=...
                 files.save_result(DATA_DIR, doc_id, md, "md")
 
@@ -188,7 +188,7 @@ async def orphan_cleanup_loop():
 
 
 def run_orphan_cleanup() -> dict:
-    """Удаляет FS-папки без записи в БД и помечает записи без файлов как error."""
+    """Delete FS directories with no matching DB record and mark records with missing files as error."""
     import shutil
     conn = _conn()
     try:
@@ -230,11 +230,11 @@ async def upload_files(
     lang: str = Form("ru"),
     project_id: int = Form(INBOX_ID),
 ):
-    """Сохранить файлы как queued документы. НЕ запускает OCR — для этого POST /api/recognize.
+    """Save files as queued documents. Does NOT start OCR — use POST /api/recognize for that.
 
     Response shape: {ids: [<created doc ids>], warnings: [], errors: [{filename, error}]}.
-    `warnings` заполняется в Task 10 (page-warning для PDF >50 страниц).
-    format всегда 'md' (canonical); TXT/DOCX генерируются лениво через /api/result.
+    `warnings` is populated for PDFs with >50 pages (long-processing warning).
+    format is always 'md' (canonical); TXT/DOCX are generated lazily via /api/result.
     """
     if lang not in ("ru", "en"):
         raise HTTPException(400, "Invalid language. Use ru or en.")
@@ -263,12 +263,12 @@ async def upload_files(
                 doc_id=doc_id,
                 project_id=project_id,
                 filename=Path(f.filename or "file").name,
-                format="md",  # ВСЕГДА md (canonical), TXT/DOCX генерируются лениво
+                format="md",  # ALWAYS md (canonical); TXT/DOCX are generated lazily
                 lang=lang,
                 size_bytes=len(content),
             )
-            # Page-warning для длинных PDF (Task 10): UI покажет «займёт время».
-            # Ошибка PyMuPDF не должна блокировать upload — _pdf_page_count вернёт 0.
+            # Page warning for long PDFs: UI will indicate "this will take a while".
+            # A PyMuPDF error must not block the upload — _pdf_page_count returns 0 on failure.
             if ext == ".pdf":
                 try:
                     saved_path = files.original_path(DATA_DIR, doc_id)
@@ -282,7 +282,7 @@ async def upload_files(
                             })
                 except Exception:
                     pass
-            # NB: НЕ кладём в task_queue — старт только через POST /api/recognize.
+            # NB: NOT added to task_queue — OCR starts only via POST /api/recognize.
             ids.append(doc_id)
         return {"ids": ids, "warnings": warnings, "errors": errors}
     finally:
@@ -291,10 +291,10 @@ async def upload_files(
 
 @app.post("/api/recognize")
 async def recognize_project(project_id: int):
-    """Запустить OCR для всех queued документов проекта.
+    """Start OCR for all queued documents in the project.
 
-    Кладёт каждого queued doc_id в task_queue, worker подхватит асинхронно.
-    Возвращает {started: <count>, doc_ids: [<list>]}.
+    Puts each queued doc_id into task_queue; worker picks them up asynchronously.
+    Returns {started: <count>, doc_ids: [<list>]}.
     """
     conn = _conn()
     try:
@@ -380,12 +380,12 @@ def _doc_response(d: dict) -> dict:
 
 @app.get("/api/result/{doc_id}")
 async def download_result(doc_id: str, format: str | None = None):
-    """Download result file. Поддерживает lazy-generation TXT/DOCX из result.md.
+    """Download result file. Supports lazy generation of TXT/DOCX from result.md.
 
-    - ?format=md|txt|docx — явный выбор формата.
-    - Без format — берёт `documents.format` из БД (backward compat).
-    - Если запрошенный формат отсутствует, но result.md есть — генерит из md, сохраняет, отдаёт.
-    - Если result.md нет (legacy без md-источника) — 404 для всех кроме фактического формата.
+    - ?format=md|txt|docx — explicit format selection.
+    - Without format — uses `documents.format` from the database (backward compat).
+    - If the requested format is absent but result.md exists — generates from md, saves, returns.
+    - If result.md is absent (legacy without md source) — 404 for all formats except the native one.
     """
     conn = _conn()
     try:
@@ -424,10 +424,9 @@ async def download_result(doc_id: str, format: str | None = None):
 
 @app.get("/api/source/{doc_id}")
 async def get_source(doc_id: str):
-    """Вернуть оригинальный файл (PDF/image) для рендера в Source pane.
+    """Return the original file (PDF/image) for rendering in the Source pane.
 
-    Используется frontend Source pane (Task 22) для крупного отображения
-    исходника текущего документа.
+    Used by the frontend Source pane to display the current document at full size.
     """
     conn = _conn()
     try:
@@ -444,11 +443,11 @@ async def get_source(doc_id: str):
 
 @app.get("/api/markdown/{doc_id}")
 async def get_markdown(doc_id: str, format: str = "md"):
-    """Возвращает raw текст результата как text/plain.
+    """Return the raw result text as text/plain.
 
-    - format='md' (default) → читает result.md.
-    - format='txt' → лениво генерит result.txt из result.md, отдаёт.
-    - 404 если запрошенный формат недоступен (legacy без md-источника).
+    - format='md' (default) → reads result.md.
+    - format='txt' → lazily generates result.txt from result.md and returns it.
+    - 404 if the requested format is unavailable (legacy without md source).
     """
     if format not in ("md", "txt"):
         raise HTTPException(400, f"Invalid format for markdown endpoint: {format}")
@@ -549,7 +548,7 @@ async def delete_project(project_id: int):
         processing = [d for d in doc_repo.list(project_id=project_id) if d["status"] == "processing"]
         if processing:
             raise HTTPException(409, "project has processing documents, wait")
-        # Удаляем FS-папки документов проекта до cascade-delete
+        # Delete document FS directories before the cascade-delete
         for d in doc_repo.list(project_id=project_id):
             files.delete_doc_dir(DATA_DIR, d["id"])
         try:
@@ -610,7 +609,7 @@ async def system_info():
 
 @app.get("/api/limits")
 async def get_limits():
-    """Информация о лимитах для UI (показ заранее)."""
+    """Limits information for the UI (shown proactively)."""
     return {
         "max_file_size_bytes": MAX_FILE_SIZE,
         "allowed_extensions": sorted(ALLOWED_EXTENSIONS),
@@ -622,12 +621,12 @@ from . import preview as _preview
 
 @app.get("/api/rendered/{doc_id}")
 async def get_rendered(doc_id: str, format: str = "md"):
-    """Возвращает HTML rendered для просмотра в Result-pane.
+    """Return rendered HTML for viewing in the Result pane.
 
-    - format='md'   → markdown library + bleach.
-    - format='docx' → mammoth(result.docx). Если result.docx нет — лениво
-                       генерит из result.md через converters.md_to_docx.
-    - 404 если нужный источник недоступен.
+    - format='md'   → markdown library + bleach sanitizer.
+    - format='docx' → mammoth(result.docx). If result.docx is absent — lazily
+                       generates from result.md via converters.md_to_docx.
+    - 404 if the required source is unavailable.
     """
     if format not in ("md", "docx"):
         raise HTTPException(400, f"Invalid format for rendered endpoint: {format}")
@@ -644,14 +643,14 @@ async def get_rendered(doc_id: str, format: str = "md"):
             if md_path is None:
                 raise HTTPException(404, "No markdown source available")
             html = _preview.markdown_to_html(md_path.read_text(encoding="utf-8"))
-            # Фронтенд читает ответ через `_text(resp)` и вставляет в innerHTML.
-            # Возврат JSON ломал бы рендеринг — отдаём raw text/html.
+            # Frontend reads the response via `_text(resp)` and inserts it into innerHTML.
+            # Returning JSON would break rendering — send raw text/html.
             return HTMLResponse(html, media_type="text/html; charset=utf-8")
 
         # format == "docx"
         docx_path = files.result_path_for_format(DATA_DIR, doc_id, "docx")
         if docx_path is None:
-            # Ленивая генерация из result.md
+            # Lazy generation from result.md
             md_path = files.result_path_for_format(DATA_DIR, doc_id, "md")
             if md_path is None:
                 raise HTTPException(404, "No source for docx generation")
@@ -665,7 +664,7 @@ async def get_rendered(doc_id: str, format: str = "md"):
 
 @app.get("/api/preview/{doc_id}/info")
 async def preview_info(doc_id: str):
-    """Метаданные превью без рендера. Дёшево — читает только page_count из PyMuPDF."""
+    """Preview metadata without rendering. Cheap — reads only page_count via PyMuPDF."""
     from . import preview_render
     conn = _conn()
     try:
@@ -690,7 +689,7 @@ async def preview_info(doc_id: str):
 
 @app.get("/api/preview/{doc_id}/thumbs")
 async def preview_thumbs(doc_id: str):
-    """Все миниатюры как base64-JSON (компактные DPI=80)."""
+    """All thumbnails as base64 JSON (compact DPI=80)."""
     import base64
     from . import preview_render
     conn = _conn()
@@ -710,7 +709,7 @@ async def preview_thumbs(doc_id: str):
 
 @app.get("/api/preview/{doc_id}/page/{page_num}")
 async def preview_page(doc_id: str, page_num: int):
-    """Full-разрешение страница как JPEG-bytes."""
+    """Full-resolution page as JPEG bytes."""
     from . import preview_render
     conn = _conn()
     try:
@@ -734,7 +733,7 @@ async def preview_page(doc_id: str, page_num: int):
 
 @app.get("/api/projects/{project_id}/zip")
 async def download_project_zip(project_id: int):
-    """Скачать архив всех done-документов проекта."""
+    """Download a ZIP archive of all completed documents in the project."""
     import io
     import zipfile
     from fastapi.responses import StreamingResponse
@@ -750,9 +749,9 @@ async def download_project_zip(project_id: int):
         if not done_docs:
             raise HTTPException(404, "No completed documents in project")
 
-        # Архив собирается целиком в RAM (BytesIO). Допустимо при текущих лимитах
-        # MAX_FILE_SIZE × число документов; если проекты вырастут до сотен мегабайт —
-        # перейти на SpooledTemporaryFile или генератор-стриминг.
+        # The archive is assembled entirely in RAM (BytesIO). Acceptable at current limits
+        # of MAX_FILE_SIZE × number of documents; if projects grow to hundreds of MB,
+        # switch to SpooledTemporaryFile or a streaming generator.
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             seen_names: set[str] = set()

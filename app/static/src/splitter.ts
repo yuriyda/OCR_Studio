@@ -1,12 +1,12 @@
 /**
- * Тонкая обёртка над split.js для resizable 3-pane layout (sidebar | source | result).
+ * Thin wrapper around split.js for a resizable 3-pane layout (sidebar | source | result).
  *
- * Редактирование:
- * - Размеры (sizes) — % ширины, минимумы (minSize) — px. Восстанавливаются из state.panelSizes
- *   и сохраняются через onResize callback в state.setPanelSizes() (вызов в main.ts).
- * - gutterSize=6 — узкая полоска между панелями. Стилизуется через main.css.
- * - direction='horizontal' — резайз по ширине. Для вертикали будет отдельный init.
- * - cursor='col-resize' — браузер показывает правильный курсор при hover.
+ * Maintenance notes:
+ * - sizes — % of total width; minSize — px. Restored from state.panelSizes
+ *   and saved via the onResize callback in state.setPanelSizes() (called in main.ts).
+ * - gutterSize=6 — narrow strip between panes. Styled via main.css.
+ * - direction='horizontal' — resize by width. A separate init would be needed for vertical.
+ * - cursor='col-resize' — browser shows the correct cursor on hover.
  */
 
 import Split from 'split.js';

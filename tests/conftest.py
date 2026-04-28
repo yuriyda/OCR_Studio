@@ -1,6 +1,6 @@
 """
-Общие pytest-фикстуры для backend-тестов.
-Редактирование: добавлять фикстуры, не удалять существующие без согласования.
+Shared pytest fixtures for backend tests.
+Maintenance notes: add fixtures; do not remove existing ones without discussion.
 """
 import shutil
 import sys
@@ -13,9 +13,9 @@ import pytest
 
 
 def stub_paddleocr_modules():
-    """Подставляет заглушки для paddleocr и paddlepaddle, которых нет в тестовой среде.
+    """Install stubs for paddleocr and paddlepaddle, which are not present in the test environment.
 
-    Вызывается до любого импорта app.ocr_engine, чтобы избежать ModuleNotFoundError.
+    Must be called before any import of app.ocr_engine to avoid ModuleNotFoundError.
     """
     for mod_name in ("paddleocr", "paddle", "paddlepaddle"):
         if mod_name not in sys.modules:
@@ -24,14 +24,14 @@ def stub_paddleocr_modules():
     paddle_mod.PPStructureV3 = MagicMock()
 
 
-# Вызываем заглушки сразу при загрузке conftest, чтобы гарантировать корректное окружение
-# для всех тестовых файлов независимо от порядка их выполнения.
+# Install stubs immediately on conftest load to guarantee correct environment
+# for all test files regardless of execution order.
 stub_paddleocr_modules()
 
 
 @pytest.fixture
 def tmp_data_dir(monkeypatch):
-    """Изолированная папка data/ для каждого теста."""
+    """Isolated data/ directory for each test."""
     tmp = Path(tempfile.mkdtemp(prefix="ocr_test_"))
     (tmp / "docs").mkdir()
     monkeypatch.setenv("OCR_DATA_DIR", str(tmp))

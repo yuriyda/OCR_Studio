@@ -1,12 +1,12 @@
 /**
- * Точка входа frontend OCR Studio (Vite entry).
+ * Frontend entry point for OCR Studio (Vite entry).
  *
- * Редактирование:
- * - Здесь только wiring и orchestration. Логика рендера/состояния — в отдельных модулях.
- * - Document.id — string (UUID hex); Project.id — number. Не путать!
- * - На i18n:changed нужен ре-рендер dynamic-узлов (projects/documents/statusbar/tabs);
- *   data-i18n атрибуты обрабатываются автоматически в loadLang() → applyI18nToDom().
- * - Polling переключается в fast mode когда есть processing документ.
+ * Maintenance notes:
+ * - Only wiring and orchestration here. Render/state logic lives in separate modules.
+ * - Document.id — string (UUID hex); Project.id — number. Do not mix them up!
+ * - On i18n:changed, dynamic nodes (projects/documents/statusbar/tabs) need a re-render;
+ *   data-i18n attributes are handled automatically by loadLang() → applyI18nToDom().
+ * - Polling switches to fast mode when there is a processing document.
  */
 
 import './main.css';
@@ -107,10 +107,10 @@ async function loadPagePreviews(
   onProgress?: (cur: number, total: number) => void,
 ): Promise<void> {
   if (previewPagesCache.has(docId)) return;
-  // Параллельно с blocking-вызовом /thumbs опрашиваем /info чтобы поймать
-  // _preview_progress (см. preview_render.render_thumbs). Backend начинает
-  // рендерить ПОСЛЕ прихода GET /thumbs — даём ~150мс задержку перед первым
-  // poll, чтобы избежать window'а где progress=null.
+  // Concurrently with the blocking /thumbs call, poll /info to catch
+  // _preview_progress (see preview_render.render_thumbs). Backend starts
+  // rendering AFTER receiving GET /thumbs — add ~150 ms delay before the first
+  // poll to avoid the window where progress=null.
   let pollTimer: number | null = null;
   let stopped = false;
   const startPolling = () => {
@@ -151,7 +151,7 @@ async function selectDocument(docId: string): Promise<void> {
   const doc = docsCache.find(d => d.id === docId) ?? null;
   if (doc) {
     if (doc.status === 'done') {
-      // Дефолт — markdown, если доступен; иначе первый доступный таб.
+      // Default to markdown if available; otherwise the first available tab.
       const tabs = allResultTabs();
       if (isTabAvailable('markdown', doc.available_formats)) {
         resultTab = 'markdown';
@@ -161,7 +161,7 @@ async function selectDocument(docId: string): Promise<void> {
       }
     }
     if (!previewPagesCache.has(docId)) {
-      // UI не «застывает» — мгновенный спиннер до прихода thumbs.
+      // UI does not "freeze" — show an instant spinner while thumbs load.
       showSourceLoading(t('preview.source.loading'));
     }
     await loadPagePreviews(docId, (cur, total) => {
@@ -225,10 +225,10 @@ const polling = new Polling(async (pid) => {
     refreshStatusBar();
     refreshRecognizeButton();
 
-    // Если selected документ изменил статус (queued/processing → done/error)
-    // или у него прибавились available_formats — Result pane показывает
-    // устаревший «preview.unavailable». Дёргаем переключение таба и rerender,
-    // иначе пользователь видит «недоступно» пока сам не кликнет.
+    // If the selected document changed status (queued/processing → done/error)
+    // or gained new available_formats — the Result pane shows a stale
+    // "preview.unavailable". Force a tab switch and re-render,
+    // otherwise the user sees "unavailable" until they click manually.
     if (selectedDocId !== null && newSelected) {
       const statusChanged = prevSelected?.status !== newSelected.status;
       const formatsChanged =
@@ -263,14 +263,14 @@ async function uploadFiles(filesList: File[], pid: number): Promise<void> {
     }
     await refreshProjects();
     await refreshDocuments();
-    // Auto-select первый загруженный — чтобы PDF-превью появилось сразу,
-    // не дожидаясь клика по документу. Это снимает UX-впечатление «ничего не происходит».
+    // Auto-select the first uploaded document so PDF preview appears immediately,
+    // without waiting for a click. This avoids the UX impression of "nothing happening".
     if (resp.ids.length > 0) {
       const firstId = resp.ids[0];
       if (firstId) await selectDocument(firstId);
     }
-    // После upload — гарантированно живой polling (мог быть остановлен shouldStop ранее).
-    // Иначе queued doc будет «висеть» в UI без обновлений до клика «Распознать».
+    // After upload — ensure polling is running (it may have been stopped by shouldStop earlier).
+    // Otherwise a queued doc will "hang" in the UI without updates until the user clicks "Recognise".
     if (docsCache.some(d => d.status === 'queued' || d.status === 'processing')) {
       polling.start();
     }
@@ -376,7 +376,7 @@ function bindUI(): void {
     dropzone.classList.remove('border-accent');
     handleDrop(e as DragEvent, state.activeProjectId, {
       onUpload: (files, pid) => { const ok = checkSize(files); if (ok.length) uploadFiles(ok, pid); },
-      onMove: async () => { /* dropzone не принимает перемещения документов */ },
+      onMove: async () => { /* dropzone does not accept document moves */ },
     });
   });
 
@@ -384,9 +384,9 @@ function bindUI(): void {
     const pid = state.activeProjectId;
     try {
       const r = await api.recognizeProject(pid);
-      // Безусловно sync UI с backend (вдруг docsCache был stale + polling умер раньше).
+      // Unconditionally sync UI with backend (docsCache may be stale + polling may have died).
       await refreshDocuments();
-      // Безусловно reactive polling — даже если started=0, могут быть processing документы.
+      // Unconditionally start reactive polling — even if started=0, there may be processing documents.
       polling.start();
       if (r.started > 0) {
         toast.show(t('toast.recognize_started', { count: r.started }), 'info');
@@ -446,8 +446,8 @@ function handleProjectMenu(id: number): void {
         try {
           await api.deleteProject(id);
           if (state.activeProjectId === id) state.setActiveProject(INBOX_ID);
-          // Selected документ мог принадлежать удалённому проекту → каскадно удалён.
-          // Чистим панели, иначе превью «висит».
+          // The selected document may have belonged to the deleted project → cascade-deleted.
+          // Clear panes, otherwise the preview "hangs".
           if (selectedDocId !== null) {
             previewPagesCache.delete(selectedDocId);
             selectedDocId = null;
@@ -482,8 +482,8 @@ function handleDocMenu(docId: string): void {
       if (!ok) return;
       try {
         await api.deleteDocument(docId);
-        // Чистим preview-кэш и панели — иначе после удаления превью «висит» в Source/Result,
-        // пока пользователь не кликнет другой документ.
+        // Clear preview cache and panes — otherwise after deletion the preview "hangs" in Source/Result
+        // until the user clicks another document.
         previewPagesCache.delete(docId);
         if (selectedDocId === docId) {
           selectedDocId = null;

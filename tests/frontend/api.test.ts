@@ -76,8 +76,8 @@ describe('api client', () => {
   });
 
   it('deleteDocument tolerates 204 No Content (regression: SyntaxError "Unexpected end of JSON input")', async () => {
-    // Реальный backend на DELETE /api/documents/{id} возвращает 204 с пустым телом.
-    // resp.json() на пустом body бросает SyntaxError → ловится в UI как «Unexpected end of JSON input».
+    // Real backend returns 204 with empty body for DELETE /api/documents/{id}.
+    // resp.json() on empty body throws SyntaxError → caught in UI as "Unexpected end of JSON input".
     const f = vi.fn().mockResolvedValue({
       ok: true,
       status: 204,

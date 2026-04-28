@@ -1,14 +1,14 @@
 /**
- * Заменяющие нативные prompt/confirm модальные окна с Glass+Neon стилистикой.
+ * Custom modal dialogs replacing native prompt/confirm, styled with Glass+Neon.
  *
- * Редактирование:
- * - DOM создаётся динамически и удаляется на финиш — нет постоянного оверлея.
+ * Maintenance notes:
+ * - DOM is created dynamically and removed on finish — there is no persistent overlay.
  * - Esc / click-outside / Cancel → resolve null/false. Enter / Save / OK → resolve value/true.
- * - i18n строки приходят через `t('modal.btn.save'|'cancel'|'ok')` — менять только в i18n bundles.
- * - Не использовать `window.prompt` / `window.confirm` — они блокируют главный поток
- *   и игнорируются современными UI-стандартами.
- * - Стили — через классы `.modal-overlay/.modal-content/.modal-input/.modal-cancel/.modal-save`
- *   из main.css. Inline-стили только для уникальных одноразовых вещей.
+ * - i18n strings come via `t('modal.btn.save'|'cancel'|'ok')` — change only in i18n bundles.
+ * - Do not use `window.prompt` / `window.confirm` — they block the main thread
+ *   and are ignored by modern UI standards.
+ * - Styles — via classes `.modal-overlay/.modal-content/.modal-input/.modal-cancel/.modal-save`
+ *   from main.css. Inline styles only for unique one-off cases.
  */
 
 import { t } from './i18n';

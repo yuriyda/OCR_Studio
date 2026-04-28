@@ -1,19 +1,19 @@
 /**
- * Source pane: рендер исходного документа.
+ * Source pane: renders the original document.
  *
- * Структура: [thumbnail strip слева ~88px] [large page справа].
- * - Image: strip скрыт, large = <img src="/api/source/{id}">.
- * - PDF + pages: strip с миниатюрами всех страниц (base64 jpeg),
- *   large = <img src="/api/preview/{id}/page/{n}"> — backend отдаёт full-res JPG
- *   с диска (preview_render.render_page), браузер кэширует (Cache-Control max-age=3600).
- *   Активная миниатюра подсвечена `.thumb-page-active`.
- *   Click handler привязан в main.ts (event delegation на #source-thumbs).
- * - PDF без pages → strip скрыт, large = preview.unavailable.
+ * Layout: [thumbnail strip left ~88px] [large page right].
+ * - Image: strip hidden, large = <img src="/api/source/{id}">.
+ * - PDF + pages: strip with thumbnails for all pages (base64 jpeg),
+ *   large = <img src="/api/preview/{id}/page/{n}"> — backend serves full-res JPG
+ *   from disk (preview_render.render_page), browser caches it (Cache-Control max-age=3600).
+ *   Active thumbnail highlighted with `.thumb-page-active`.
+ *   Click handler is bound in main.ts (event delegation on #source-thumbs).
+ * - PDF without pages → strip hidden, large = preview.unavailable.
  *
- * Редактирование:
- * - Не делать fetch здесь — controller (main.ts) подгружает preview в кэш.
- * - selectedPageIdx clamped в [0, pages.length-1].
- * - Large page НИКОГДА не строится из base64 — только URL. Thumbnails — base64 (компактная полоса).
+ * Maintenance notes:
+ * - Do not fetch here — the controller (main.ts) loads preview into the cache.
+ * - selectedPageIdx is clamped to [0, pages.length-1].
+ * - Large page is NEVER built from base64 — URL only. Thumbnails use base64 (compact strip).
  */
 
 import type { Document } from './types';
@@ -54,8 +54,8 @@ export function renderSourcePane(
       const active = i === idx ? 'thumb-page-active' : '';
       return `<img class="source-thumb ${active}" data-page-idx="${i}" src="data:image/jpeg;base64,${b64}" alt="page ${i + 1}" />`;
     }).join('');
-    // Large — direct URL: browser догружает + кэш-control. base64 в JSON был бы лишним
-    // мегабайтом для каждого клика. Backend обслуживает с диска через preview_render.render_page.
+    // Large — direct URL: browser fetches + cache-control applies. base64 in JSON would cost
+    // an extra megabyte per click. Backend serves from disk via preview_render.render_page.
     largeContainer.innerHTML = `<img src="/api/preview/${escHtml(doc.id)}/page/${idx + 1}" alt="page ${idx + 1}" class="source-large max-w-full max-h-full rounded border border-border bg-white" />`;
     return;
   }

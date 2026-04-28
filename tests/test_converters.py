@@ -1,4 +1,4 @@
-"""Тесты конвертера markdown → docx (через html_to_docx walker)."""
+"""Tests for the markdown → docx converter (via html_to_docx walker)."""
 from __future__ import annotations
 
 import io

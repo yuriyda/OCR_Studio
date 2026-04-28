@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
-Smoke-test: убедиться, что engine.predict() — ленивый generator, а не batch.
+Smoke test: verify that engine.predict() is a lazy generator, not a batch call.
 
-Назначение / редактирование:
-- Запускать вручную, не часть pytest suite.
-- Если generator реально lazy — print покажет постраничные интервалы (секунды).
-- Если PaddleOCR батчит все страницы внутри predict() — все строки появятся
-  одновременно после длительной паузы. В таком случае worker progress
-  callback фейковый (см. risks в spec).
-- Не модифицировать без согласования: это репродукционный гейт, не функциональность.
+Purpose / Maintenance notes:
+- Run manually; not part of the pytest suite.
+- If the generator is truly lazy — print output will show per-page intervals (seconds apart).
+- If PaddleOCR batches all pages inside predict() — all lines will appear at once
+  after a long pause. In that case the worker progress callback is fake (see risks in spec).
+- Do not modify without discussion: this is a reproduction gate, not a feature.
 """
 import sys
 import time
@@ -23,8 +22,8 @@ if not Path(pdf).exists():
     print(f"File not found: {pdf}")
     sys.exit(1)
 
-# Import только если файл валиден — избегаем 30s загрузки моделей
-# при синтаксических ошибках вызова.
+# Import only after validating arguments — avoids the ~30 s model-loading
+# cost on simple usage errors.
 from paddleocr import PPStructureV3
 
 print("Loading PPStructureV3 (lang=ru)...")

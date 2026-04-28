@@ -1,15 +1,15 @@
 /**
- * Подготовка текста для копирования в буфер обмена.
+ * Text preparation for clipboard copy.
  *
- * Редактирование:
- * - `htmlToPlainText` обрабатывает DOM из rendered HTML (для docx). Блочные
- *   элементы добавляют `\n`, ячейки таблицы (`TD`/`TH`) разделяются `\t`.
- *   Меняешь набор тегов — обнови `BLOCK_TAGS`.
- * - `getCopyText` для md/txt возвращает RAW markdown (через `apiClient.getMarkdown`
- *   → `string`). Для docx — plain-text из rendered HTML (`apiClient.getRendered`
- *   → `string`). API в `api.ts` возвращает строку напрямую, не объект.
- * - Никакого DOM-стейта или toast-логики здесь — это чистый утилитарный модуль.
- *   UI-сторона (toast/clipboard write) — в main.ts/app слое.
+ * Maintenance notes:
+ * - `htmlToPlainText` processes DOM from rendered HTML (for docx). Block
+ *   elements append `\n`; table cells (`TD`/`TH`) are separated by `\t`.
+ *   If you change the tag set — update `BLOCK_TAGS`.
+ * - `getCopyText` for md/txt returns RAW markdown (via `apiClient.getMarkdown`
+ *   → `string`). For docx — plain text from rendered HTML (`apiClient.getRendered`
+ *   → `string`). The API in `api.ts` returns a string directly, not an object.
+ * - No DOM state or toast logic here — this is a pure utility module.
+ *   UI layer (toast/clipboard write) belongs in main.ts/app layer.
  */
 
 const BLOCK_TAGS = new Set([

@@ -1,16 +1,16 @@
 /**
- * Render списка документов в sidebar.
+ * Render the document list in the sidebar.
  *
- * Редактирование:
- * - Иконка типа файла — через `iconForFilename` (icons.ts).
- * - Размер — через `formatBytes` (icons.ts).
- * - Состояния:
- *   - queued / done / error → бейдж .badge-{state} с i18n-меткой.
- *   - processing → progress-bar (.progress-fill, ширина = progress_percent) + счётчик "стр N/M".
- * - error_message (доступен для error-документов) показывается в title бейджа.
- * - Document.id — string. activeId сравнивается строкой; null допустимо.
- * - Не навешивать click-обработчики здесь; делегирование в main.ts.
- * - applySort: чистая ф-я, возвращает новый массив, не мутирует.
+ * Maintenance notes:
+ * - File type icon — via `iconForFilename` (icons.ts).
+ * - Size — via `formatBytes` (icons.ts).
+ * - States:
+ *   - queued / done / error → badge .badge-{state} with i18n label.
+ *   - processing → progress bar (.progress-fill, width = progress_percent) + "page N/M" counter.
+ * - error_message (available for error documents) shown in the badge title.
+ * - Document.id is a string. activeId is compared as a string; null is valid.
+ * - Do not attach click handlers here; delegate via main.ts.
+ * - applySort: pure function, returns a new array, does not mutate.
  */
 
 import type { Document } from './types';
@@ -38,7 +38,7 @@ function progressMarkup(d: Document): string {
   const cur = d.current_page ?? 0;
   const tot = d.page_count ?? 0;
   const pct = Math.max(0, Math.min(100, d.progress_percent ?? 0));
-  // stage_label от бэкенда имеет приоритет над счётчиком страниц
+  // stage_label from the backend takes priority over the page counter
   const label = d.stage_label ?? (tot ? `${cur}/${tot}` : '');
   const counter = label
     ? `<span class="text-xs text-text-muted">${escHtml(label)}</span>`

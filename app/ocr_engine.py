@@ -1,17 +1,17 @@
 """
-Обёртка над PaddleOCR PPStructureV3.
+Wrapper around PaddleOCR PPStructureV3.
 
-Редактирование:
-- Язык OCR-движка зафиксирован = 'ru' (cyrillic-модель). Не добавлять lang-параметр
-  обратно без согласования — см. spec ux-cleanup §2.
-- Public-API: `process_file(file_path, progress_callback=None, stage_callback=None)`.
-  Его вызывает worker в app/main.py.
-- Фикс порядка колонок таблиц через сортировку по X-координате (`html_table_to_markdown`)
-  не удалять — он чинит баг SLANet (см. memory.md «Table Column Order Fix»).
-- progress_callback вызывается в начале и конце обработки каждой страницы (1-based).
-- stage_callback вызывается перед вызовом каждой sub-model pipeline (layout/text/table/formula).
-- PDF разбивается на single-page файлы через PyMuPDF — predict() вызывается per-page.
-  Это даёт реальный прогресс за счёт потери batch-оптимизаций PaddleOCR (~30-50% slower).
+Maintenance notes:
+- OCR engine language is fixed to 'ru' (cyrillic model). Do not re-add a lang parameter
+  without discussion — see spec ux-cleanup §2.
+- Public API: `process_file(file_path, progress_callback=None, stage_callback=None)`.
+  Called by the worker in app/main.py.
+- The table column order fix via X-coordinate sorting (`html_table_to_markdown`)
+  must not be removed — it corrects a SLANet bug (see memory.md 'Table Column Order Fix').
+- progress_callback is called at the start and end of each page (1-based).
+- stage_callback is called before each sub-model pipeline invocation (layout/text/table/formula).
+- PDF is split into single-page files via PyMuPDF — predict() is called per page.
+  This provides real progress at the cost of losing PaddleOCR batch optimisations (~30-50% slower).
 """
 
 import logging
@@ -24,9 +24,9 @@ logger = logging.getLogger(__name__)
 
 _engine: PPStructureV3 | None = None
 
-# Список ключевых моделей PPStructureV3 pipeline. Используется в /api/system и
-# stage_label («Загрузка моделей: ...»). Имена соответствуют каталогам в
-# /home/node/.paddlex/official_models/. Меняется только при апгрейде PaddleOCR.
+# List of key PPStructureV3 pipeline models. Used in /api/system and
+# stage_label ("Loading models: ..."). Names correspond to directories in
+# /home/node/.paddlex/official_models/. Update only on PaddleOCR upgrades.
 PIPELINE_MODELS: list[dict] = [
     {"role": "layout",   "name": "PicoDet-S_layout_3cls"},
     {"role": "text_det", "name": "PP-OCRv5_server_det"},
@@ -39,8 +39,8 @@ PIPELINE_MODELS: list[dict] = [
 class _Hooked:
     """Callable proxy that fires callback(name) before delegating to inner.
 
-    Используется install_stage_hooks для оборачивания sub-model атрибутов
-    paddlex_pipeline. Ошибки callback изолированы — не ломают OCR-процесс.
+    Used by install_stage_hooks to wrap sub-model attributes of paddlex_pipeline.
+    Callback errors are isolated — they do not break the OCR process.
     """
 
     def __init__(self, inner, callback, name):
@@ -64,22 +64,22 @@ def install_stage_hooks(engine, on_stage_start) -> None:
     """Wrap sub-models on engine's INTERNAL pipeline(s) so on_stage_start(name) fires
     before each model invocation. Side-effect: replaces attributes in place.
 
-    NB: `engine.paddlex_pipeline` — это `AutoParallelSimpleInferencePipeline`-обёртка.
-    Реальный `LayoutParsingPipelineV2` лежит в `_pipeline` (single-device) или
-    в `_pipelines[*]` (multi-device). __getattr__ wrapper-а проксирует ЧТЕНИЕ, но
-    setattr на wrapper НЕ пробрасывается — поэтому `LayoutParsingPipelineV2.predict()`,
-    вызывая `self.layout_det_model(...)`, обходит наш wrap. Чтобы hooks реально срабатывали,
-    оборачиваем атрибуты на каждом ВНУТРЕННЕМ pipeline.
+    NB: `engine.paddlex_pipeline` is an `AutoParallelSimpleInferencePipeline` wrapper.
+    The real `LayoutParsingPipelineV2` lives in `_pipeline` (single-device) or
+    `_pipelines[*]` (multi-device). The wrapper's __getattr__ proxies READ access, but
+    setattr on the wrapper does NOT propagate — so `LayoutParsingPipelineV2.predict()`,
+    when it calls `self.layout_det_model(...)`, bypasses our wrap. To make hooks actually
+    fire, we wrap attributes on each INNER pipeline.
 
-    Идемпотентно: если атрибут — наша обёртка _Hooked, переустанавливаем callback.
-    Stage name соответствует user-facing labels (layout, text, table, formula,
-    region, chart). Отсутствующие sub-models просто пропускаем (use_*=False).
+    Idempotent: if an attribute is already a _Hooked wrapper, only the callback is updated.
+    Stage names match user-facing labels (layout, text, table, formula,
+    region, chart). Missing sub-models are simply skipped (use_*=False).
     """
     pipeline = getattr(engine, "paddlex_pipeline", None)
     if pipeline is None:
         return
 
-    # Найти ВНУТРЕННИЕ pipelines, где реально живут sub-models.
+    # Find INNER pipelines where sub-models actually live.
     actual_pipelines: list = []
     if getattr(pipeline, "_multi_device_inference", False):
         actual_pipelines = list(getattr(pipeline, "_pipelines", []))
@@ -88,7 +88,7 @@ def install_stage_hooks(engine, on_stage_start) -> None:
         if inner_pipeline is not None:
             actual_pipelines = [inner_pipeline]
 
-    # Fallback для тестов с MagicMock-pipeline без _pipeline атрибута.
+    # Fallback for tests that use a MagicMock pipeline without a _pipeline attribute.
     if not actual_pipelines:
         actual_pipelines = [pipeline]
 
@@ -114,9 +114,9 @@ def install_stage_hooks(engine, on_stage_start) -> None:
 def get_engine() -> PPStructureV3:
     """Return (and lazily initialize) the shared PPStructureV3 engine.
 
-    Язык OCR-движка зафиксирован = 'ru' (cyrillic-модель). Cyrillic-модель
-    хорошо захватывает и латиницу — для смешанных RU+EN документов работает
-    приемлемо без разделения на 2 модели. См. spec ux-cleanup §2.
+    OCR engine language is fixed to 'ru' (cyrillic model). The cyrillic model
+    also handles latin characters well — adequate for mixed RU+EN documents
+    without splitting into two models. See spec ux-cleanup §2.
     """
     global _engine
     if _engine is None:
@@ -241,16 +241,15 @@ def process_file(
 ) -> str:
     """Run OCR on a file and return the result as a markdown string.
 
-    Язык зафиксирован = 'ru' (cyrillic-модель). Lang-параметр удалён — см. spec ux-cleanup §2.
+    Language is fixed to 'ru' (cyrillic model). The lang parameter was removed — see spec ux-cleanup §2.
 
-    Real progress: для PDF разбиваем на single-page файлы через PyMuPDF и
-    вызываем engine.predict() per-page. progress_callback срабатывает между
-    страницами с реальными значениями. Внутри одной страницы — sub-models
-    pipeline'а вызываются последовательно; stage_callback (если задан)
-    срабатывает перед каждой sub-model.
+    Real progress: for PDFs the file is split into single-page files via PyMuPDF and
+    engine.predict() is called per page. progress_callback fires between pages with real values.
+    Within a single page, pipeline sub-models run sequentially; stage_callback (if provided)
+    fires before each sub-model.
 
     progress_callback(current_page: int, total_pages: int)
-    stage_callback(stage_name: str) — необязательный
+    stage_callback(stage_name: str) — optional
     """
     import tempfile
     engine = get_engine()
@@ -283,13 +282,13 @@ def process_file(
                 if progress_callback is not None:
                     progress_callback(page_num, total_pages)
 
-                # Извлекаем одну страницу в отдельный PDF
+                # Extract a single page into a separate PDF
                 single_pdf = tmp_root / f"page_{page_num:03d}.pdf"
                 with fitz.open() as out_pdf:
                     out_pdf.insert_pdf(src_pdf, from_page=page_idx, to_page=page_idx)
                     out_pdf.save(str(single_pdf))
 
-                # OCR одной страницы; stage hooks fire внутри
+                # OCR for one page; stage hooks fire inside
                 for page_result in engine.predict(str(single_pdf)):
                     md_parts.append(page_to_markdown(page_result, page_num))
 

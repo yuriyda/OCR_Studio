@@ -17,8 +17,8 @@ describe('renderStatusBar', () => {
     expect(sb.textContent).toContain('5');
     expect(sb.textContent).toContain('12.0 МБ');
     expect(sb.textContent).toContain('готов');
-    // engine.lang («· ru») намеренно скрыт — это OCR-движок, не UI-локаль.
-    // Проверяем что НЕ появляется как отдельный токен после статуса.
+    // engine.lang ("· ru") is intentionally hidden — it is the OCR engine, not the UI locale.
+    // Verify it does NOT appear as a separate token after the status.
     expect(sb.textContent).not.toMatch(/готов\s*·\s*ru/);
   });
 
@@ -39,8 +39,8 @@ describe('renderStatusBar', () => {
       engine: { name: 'PPStructureV3', lang: 'ru', status: 'ready', pipeline: [] },
       project: null,
     });
-    // engine.lang — это OCR-движок (cyrillic). Он не отображается в статусбаре,
-    // только в tooltip (через pipeline список моделей).
+    // engine.lang — this is the OCR engine language (cyrillic). It is not rendered in the status bar,
+    // only in the tooltip (via the pipeline model list).
     expect(sb.textContent).not.toContain('· ru');
   });
 

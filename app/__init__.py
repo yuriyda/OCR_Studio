@@ -1,6 +1,6 @@
 """
-Пакет OCR-сервиса.
+OCR service package.
 
-Редактирование: пакет должен оставаться импортируемым (`from app import main, db, ...`);
-не помещать здесь side-effects. Все шапки модулей — в индивидуальных файлах.
+Maintenance notes: the package must remain importable (`from app import main, db, ...`);
+do not place side-effects here. Module-level docstrings belong in individual files.
 """

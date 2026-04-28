@@ -1,10 +1,10 @@
 """
-Сбор информации об окружении для status bar.
+Environment information collection for the status bar.
 
-Редактирование:
-- Не делать здесь обращений к БД или к OCR-движку.
-- Все источники данных — системные утилиты или переданные параметры.
-- Деградация на отсутствии данных — поля становятся None.
+Maintenance notes:
+- No database or OCR-engine access here.
+- All data sources are system utilities or passed-in parameters.
+- Graceful degradation on missing data — fields become None.
 """
 from __future__ import annotations
 

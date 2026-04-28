@@ -1,6 +1,6 @@
 """
-Unit-тесты для app/db.py.
-Редактирование: при добавлении миграций добавлять соответствующие тесты.
+Unit tests for app/db.py.
+Maintenance notes: add corresponding tests when adding new migrations.
 """
 import sqlite3
 from pathlib import Path
@@ -23,7 +23,7 @@ def test_init_creates_schema(tmp_data_dir):
 def test_init_idempotent(tmp_data_dir):
     db_path = tmp_data_dir / "data.db"
     db.init(db_path)
-    db.init(db_path)  # повторный вызов не должен падать
+    db.init(db_path)  # second call must not raise
     conn = sqlite3.connect(db_path)
     rows = conn.execute("SELECT version FROM schema_version ORDER BY version").fetchall()
     assert rows == [(1,), (2,), (3,), (4,)]
@@ -108,7 +108,7 @@ def test_check_constraint_invalid_format_rejected(tmp_data_dir):
 
 
 def test_check_constraint_rejects_bad_created_at(tmp_data_dir):
-    """v2 migration: created_at в проектах должен соответствовать ISO-8601-префиксу 20XX-."""
+    """v2 migration: created_at in projects must match the ISO-8601 prefix 20XX-."""
     import pytest
     db_path = tmp_data_dir / "data.db"
     db.init(db_path)
@@ -123,7 +123,7 @@ def test_check_constraint_rejects_bad_created_at(tmp_data_dir):
 
 
 def test_check_constraint_accepts_iso_created_at(tmp_data_dir):
-    """ISO-8601 даты с таймзоной должны проходить."""
+    """ISO-8601 dates with timezone must pass the constraint."""
     db_path = tmp_data_dir / "data.db"
     db.init(db_path)
     conn = db.get_connection(db_path)
@@ -138,7 +138,7 @@ def test_check_constraint_accepts_iso_created_at(tmp_data_dir):
 
 
 def test_check_constraint_rejects_bad_doc_created_at(tmp_data_dir):
-    """v2 migration также для documents.created_at."""
+    """v2 migration also applies the constraint to documents.created_at."""
     import pytest
     db_path = tmp_data_dir / "data.db"
     db.init(db_path)
@@ -177,7 +177,7 @@ def test_migration_v3_idempotent(tmp_path):
     from app import db
     db_path = tmp_path / "test.db"
     db.init(db_path)
-    db.init(db_path)  # second call — no error
+    db.init(db_path)  # second call must not raise
     conn = db.get_connection(db_path)
     try:
         v = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
@@ -201,9 +201,9 @@ def test_migration_v4_adds_stage_detail_column(tmp_path):
 
 
 def test_v2_migration_preserves_v1_data(tmp_data_dir):
-    """v1→v2 миграция должна сохранить существующие записи."""
+    """v1→v2 migration must preserve existing records."""
     db_path = tmp_data_dir / "data.db"
-    # Симулируем "старую" базу: создаём только v1
+    # Simulate an "old" database: create only v1
     import sqlite3 as _sql
     raw = _sql.connect(str(db_path))
     raw.execute("PRAGMA journal_mode = WAL")
@@ -225,7 +225,7 @@ def test_v2_migration_preserves_v1_data(tmp_data_dir):
     raw.commit()
     raw.close()
 
-    # Теперь дёргаем init — должен подхватить и доехать до актуальной версии
+    # Now call init — must pick up from where it left off and migrate to the current version
     db.init(db_path)
     conn = db.get_connection(db_path)
     proj_count = conn.execute("SELECT COUNT(*) FROM projects WHERE name='Legacy'").fetchone()[0]

@@ -1,12 +1,12 @@
 /*
- * Tailwind дизайн-система: токены и компонентные классы для OCR Studio (Glass+Neon dark).
+ * Tailwind design system: tokens and component classes for OCR Studio (Glass+Neon dark).
  *
- * Редактирование:
- * - Изменение токенов цвета/тени/градиента — только через `tailwind.config.ts` (extend.colors / boxShadow / backgroundImage),
- *   НЕ хардкодить hex здесь.
- * - Компонентные классы (.glass-panel, .cta-primary, .pill, .doc-item, .modal-*, .toast-*, .badge*, .progress-fill)
- *   — переиспользуются в TS-модулях; переименование требует синхронной правки в .ts/.html.
- * - Анимации (fade-in, toast-in) — only здесь; в TS не дублировать.
+ * Maintenance notes:
+ * - Color/shadow/gradient token changes — only via `tailwind.config.ts` (extend.colors / boxShadow / backgroundImage),
+ *   do NOT hardcode hex values here.
+ * - Component classes (.glass-panel, .cta-primary, .pill, .doc-item, .modal-*, .toast-*, .badge*, .progress-fill)
+ *   — reused in TS modules; renaming requires synchronous edits in .ts/.html files.
+ * - Animations (fade-in, toast-in) — only here; do not duplicate in TS.
  */
 @tailwind base;
 @tailwind components;

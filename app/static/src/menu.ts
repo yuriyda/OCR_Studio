@@ -1,14 +1,14 @@
 /**
- * Context menu (dropdown) с keyboard / click-outside dismiss.
+ * Context menu (dropdown) with keyboard / click-outside dismiss.
  *
- * Редактирование:
- * - Только один активный menu — `showMenu` сначала закрывает предыдущий.
- * - role=menu / menuitem обязательны для accessibility.
- * - Listeners (Esc + click outside) инсталлируются на open и снимаются на close,
- *   чтобы не утекала память.
- * - Click outside ставится с задержкой setTimeout(0), иначе тот же click,
- *   который открыл menu, тут же закроет его.
- * - Стили — `.context-menu / .menu-item / .menu-item.danger` из main.css.
+ * Maintenance notes:
+ * - Only one active menu at a time — `showMenu` closes the previous one first.
+ * - role=menu / menuitem are required for accessibility.
+ * - Listeners (Esc + click outside) are installed on open and removed on close
+ *   to prevent memory leaks.
+ * - Click-outside is registered with a setTimeout(0) delay; otherwise the same click
+ *   that opened the menu would immediately close it.
+ * - Styles — `.context-menu / .menu-item / .menu-item.danger` from main.css.
  */
 
 export interface MenuItem {

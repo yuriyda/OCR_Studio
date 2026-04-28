@@ -1,15 +1,15 @@
 /**
- * Toast-уведомления с иконками, поддержкой клавиатуры (Esc), aria-разметкой.
+ * Toast notifications with icons, keyboard support (Esc), and aria markup.
  *
- * Редактирование:
- * - MAX_TOASTS=5 — больше не показывать, старые удаляются по FIFO. Не убирать
- *   ограничение: иначе можно завалить экран при долгом polling-фейлe.
- * - Иконки (✓⚠ℹ) обязательны для color-blind. Не оставлять только цветную рамку.
- * - role=alert для errors (assistive tech прерывает) / role=status для info+success
- *   (assistive tech вежливо ждёт). Не менять.
- * - Esc-handler глобальный, инсталлируется лениво (на первом show).
- * - Стилистика — через классы `.toast-base / .toast-success / -error / -info`
- *   из `main.css`. Не прокидывать стили inline.
+ * Maintenance notes:
+ * - MAX_TOASTS=5 — do not show more, old ones are removed FIFO. Do not remove
+ *   the limit: otherwise the screen can be flooded during a long polling failure.
+ * - Icons (✓⚠ℹ) are required for color-blind users. Do not leave only a colored border.
+ * - role=alert for errors (assistive tech interrupts) / role=status for info+success
+ *   (assistive tech waits politely). Do not change.
+ * - Esc-handler is global, installed lazily (on first show).
+ * - Styling — via classes `.toast-base / .toast-success / -error / -info`
+ *   from `main.css`. Do not pass styles inline.
  */
 
 type ToastType = 'success' | 'error' | 'info';
@@ -56,7 +56,7 @@ export const toast = {
     el.addEventListener('click', () => el.remove());
 
     if (opts.position === 'top-right') {
-      // Контейнер один; перемещаем его при необходимости (последний show выигрывает).
+      // Single container; reposition it as needed (last show wins).
       container.style.top = '20px';
       container.style.bottom = '';
     }

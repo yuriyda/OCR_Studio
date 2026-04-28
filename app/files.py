@@ -1,12 +1,12 @@
 """
-Управление физическим хранилищем документов на файловой системе.
+Physical document storage management on the filesystem.
 
-Раскладка: <data_dir>/docs/<doc_id>/{original.<ext>, result.<ext>}.
+Layout: <data_dir>/docs/<doc_id>/{original.<ext>, result.<ext>}.
 
-Редактирование:
-- Не использовать тут sqlite — только FS-операции.
-- Имена входных файлов всегда нормализуются через Path(name).name.
-- Все пути возвращаются как Path, не str.
+Maintenance notes:
+- No SQLite here — filesystem operations only.
+- Input filenames are always normalised via Path(name).name.
+- All paths are returned as Path, not str.
 """
 from __future__ import annotations
 
@@ -70,10 +70,10 @@ SUPPORTED_RESULT_FORMATS = ("md", "txt", "docx")
 
 
 def result_path_for_format(data_dir: Path, doc_id: str, format: str) -> Path | None:
-    """Путь к result.{format} если файл существует, иначе None.
+    """Return path to result.{format} if the file exists, otherwise None.
 
-    В отличие от `result_path()` (ищет любой result.*), эта функция
-    проверяет конкретный формат — нужно для format-on-demand endpoint'ов.
+    Unlike `result_path()` (which finds any result.*), this function
+    checks a specific format — needed for format-on-demand endpoints.
     """
     if format not in SUPPORTED_RESULT_FORMATS:
         return None
@@ -82,10 +82,10 @@ def result_path_for_format(data_dir: Path, doc_id: str, format: str) -> Path | N
 
 
 def available_formats(data_dir: Path, doc_id: str) -> list[str]:
-    """Список расширений (без точки) файлов result.* в папке документа.
+    """Return extensions (without dot) of result.* files in the document directory.
 
-    Используется в `/api/status` (поле `available_formats`), чтобы UI
-    мог disabled-ить недоступные табы legacy-документов.
+    Used by `/api/status` (field `available_formats`) so the UI can disable
+    tabs for formats not yet available on legacy documents.
     """
     d = doc_dir(data_dir, doc_id)
     if not d.exists():
@@ -109,26 +109,26 @@ def list_doc_dirs(data_dir: Path) -> list[str]:
 
 
 def preview_dir(data_dir: Path, doc_id: str) -> Path:
-    """Папка preview/ внутри директории документа.
+    """Return the preview/ directory inside the document directory.
 
-    Кэш миниатюр (thumb_NNN.jpg) и full-страниц (page_NNN.jpg) рендерится
-    при первом запросе и переиспользуется. Удаляется вместе с doc_dir.
+    Thumbnail cache (thumb_NNN.jpg) and full-page images (page_NNN.jpg) are rendered
+    on first request and reused. Deleted together with doc_dir.
     """
     return doc_dir(data_dir, doc_id) / "preview"
 
 
 def ensure_preview_dir(data_dir: Path, doc_id: str) -> Path:
-    """Гарантирует существование preview/, возвращает Path."""
+    """Ensure preview/ exists and return its Path."""
     p = preview_dir(data_dir, doc_id)
     p.mkdir(parents=True, exist_ok=True)
     return p
 
 
 def preview_thumb_path(data_dir: Path, doc_id: str, page_num: int) -> Path:
-    """Путь к миниатюре страницы (1-indexed). Имя: thumb_NNN.jpg."""
+    """Path to the page thumbnail (1-indexed). Filename: thumb_NNN.jpg."""
     return preview_dir(data_dir, doc_id) / f"thumb_{page_num:03d}.jpg"
 
 
 def preview_page_path(data_dir: Path, doc_id: str, page_num: int) -> Path:
-    """Путь к full-разрешению странице (1-indexed). Имя: page_NNN.jpg."""
+    """Path to the full-resolution page image (1-indexed). Filename: page_NNN.jpg."""
     return preview_dir(data_dir, doc_id) / f"page_{page_num:03d}.jpg"

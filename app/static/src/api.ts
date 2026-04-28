@@ -1,16 +1,16 @@
 /**
- * Типизированный fetch-клиент к backend OCR Studio.
+ * Typed fetch client for the OCR Studio backend.
  *
- * Редактирование:
- * - НЕ хранить состояние, НЕ делать бизнес-логику. Только обёртки над `fetch()`
- *   с типизацией ответов из `./types`.
- * - При появлении нового endpoint в `app/main.py` — добавить соответствующий
- *   метод сюда + тип ответа в `types.ts`.
- * - Помечать ID документов как `string` (uuid hex), ID проектов как `number`.
- * - URL-builders (`sourceUrl`, `resultUrl`, `projectZipUrl`) возвращают строки —
- *   используются для `window.open()` и `<img src=...>`, не для fetch.
- * - Ошибки выбрасывают `ApiError` с числовым `status` для удобной обработки UI
- *   (например, 409 → toast «дождитесь обработки»).
+ * Maintenance notes:
+ * - Do NOT store state, do NOT add business logic. Only `fetch()` wrappers
+ *   with response types from `./types`.
+ * - When a new endpoint is added to `app/main.py` — add the corresponding
+ *   method here plus the response type in `types.ts`.
+ * - Document IDs are `string` (uuid hex); project IDs are `number`.
+ * - URL builders (`sourceUrl`, `resultUrl`, `projectZipUrl`) return strings —
+ *   used for `window.open()` and `<img src=...>`, not for fetch.
+ * - Errors throw `ApiError` with a numeric `status` for convenient UI handling
+ *   (e.g. 409 → toast "wait for processing to finish").
  */
 
 import type {
@@ -34,8 +34,8 @@ async function _json<T>(resp: Response): Promise<T> {
     } catch { /* body wasn't JSON */ }
     throw new ApiError(detail, resp.status);
   }
-  // 204 No Content (DELETE /api/documents/{id}, /api/projects/{id}) — пустое тело,
-  // resp.json() бросит SyntaxError на пустой строке.
+  // 204 No Content (DELETE /api/documents/{id}, /api/projects/{id}) — empty body;
+  // resp.json() would throw SyntaxError on an empty string.
   if (resp.status === 204 || resp.headers.get('content-length') === '0') {
     return undefined as T;
   }
@@ -80,8 +80,8 @@ export const api = {
   },
 
   async uploadDocs(filesList: File[], projectId: number): Promise<UploadResponse> {
-    // Backend `/api/ocr` читает project_id как Form-поле; format больше не используется
-    // (worker всегда сохраняет result.md, остальные форматы lazy-генерируются).
+    // Backend `/api/ocr` reads project_id as a Form field; format is no longer used
+    // (worker always saves result.md; other formats are generated lazily).
     const fd = new FormData();
     for (const f of filesList) fd.append('files', f);
     fd.append('project_id', String(projectId));

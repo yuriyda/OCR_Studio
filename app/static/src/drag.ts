@@ -1,12 +1,12 @@
 /**
- * Drag-handlers: drop файлов = постановка в очередь (НЕ старт OCR — для этого Task 9 endpoint
- * /api/recognize), drag документов между проектами = move через PATCH.
+ * Drag handlers: file drop = queue upload (NOT start OCR — use /api/recognize for that),
+ * document drag between projects = move via PATCH.
  *
- * Редактирование:
- * - DocId — string (UUID hex). startDocDrag принимает string|number и форсит string.
- * - НЕ запускать здесь fetch — controller (main.ts) делает API calls в onUpload/onMove.
- * - MIME 'application/x-ocr-doc' — наш custom тип, проверяется в handleDrop для разделения
- *   "drop файла" vs "перенос документа".
+ * Maintenance notes:
+ * - DocId is a string (UUID hex). startDocDrag accepts string|number and coerces to string.
+ * - Do NOT initiate fetch here — the controller (main.ts) makes API calls in onUpload/onMove.
+ * - MIME 'application/x-ocr-doc' is our custom type, checked in handleDrop to distinguish
+ *   "file drop" from "document move".
  */
 
 export interface DropHandlers {

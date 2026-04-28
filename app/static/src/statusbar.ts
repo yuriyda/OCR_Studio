@@ -1,12 +1,12 @@
 /**
- * Render status bar внизу UI: состояние движка, окружение, статистика проекта.
+ * Render status bar at the bottom of the UI: engine state, environment, project statistics.
  *
- * Редактирование:
- * - Без бизнес-логики — только формат данных переданных controller'ом (main.ts).
- * - Размер проекта формируется через formatBytes из icons.ts.
- * - Все строки через i18n: t('statusbar.*'), t('statusbar.docs_total').
- * - 'idle' status engine показывается с тем же лейблом что 'loading' — это переходное
- *   состояние при первом запуске до получения ответа /api/system.
+ * Maintenance notes:
+ * - No business logic here — only format data passed by the controller (main.ts).
+ * - Project size is formatted via formatBytes from icons.ts.
+ * - All strings via i18n: t('statusbar.*'), t('statusbar.docs_total').
+ * - 'idle' engine status is shown with the same label as 'loading' — it is a transient
+ *   state on first startup before receiving a response from /api/system.
  */
 
 import { t } from './i18n';
@@ -42,9 +42,9 @@ export function renderStatusBar(container: HTMLElement, data: StatusBarData): vo
     ? t('statusbar.docs_total', { count: data.project.doc_count, size: formatBytes(data.project.total_bytes) })
     : '';
 
-  // engine.lang намеренно не рендерится — это OCR-движок (cyrillic), не UI-локаль.
-  // Раньше показывался как «· ru» и сбивал пользователей. Tooltip с pipeline моделями
-  // оставляем — он даёт нужную инфо при hover.
+  // engine.lang is intentionally not rendered — it is the OCR engine language (cyrillic), not the UI locale.
+  // Previously displayed as "· ru" which confused users. Tooltip with pipeline models
+  // is kept — it provides the needed info on hover.
   const tooltip = data.engine.pipeline.map(m => `${m.role}: ${m.name}`).join('\n');
   container.innerHTML = `
     <div class="flex items-center gap-4 text-xs text-text-muted px-3 py-1 bg-surface border-t border-border">

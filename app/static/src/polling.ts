@@ -1,12 +1,12 @@
 /**
- * Polling: периодически дёргает callback для обновления списка документов.
+ * Polling: periodically fires a callback to refresh the document list.
  *
- * Редактирование:
- * - Base interval (2 сек) — для обычного состояния "ничего не обрабатывается".
- * - Fast mode (1 сек) — включается через enableFast() когда есть processing документ
- *   (live progress UI должен обновляться достаточно часто, чтобы быть полезным).
- * - shouldStop — controller использует чтобы остановить poll, когда вся очередь пуста.
- * - Callback errors swallowed внутри tick'а — иначе bad fetch ломает таймер.
+ * Maintenance notes:
+ * - Base interval (2 s) — for the idle state "nothing is being processed".
+ * - Fast mode (1 s) — enabled via enableFast() when there is a processing document
+ *   (live progress UI must update frequently enough to be useful).
+ * - shouldStop — used by the controller to stop polling when the entire queue is empty.
+ * - Callback errors are swallowed inside the tick — otherwise a bad fetch breaks the timer.
  */
 
 type PollCallback = (projectId: number) => Promise<void>;

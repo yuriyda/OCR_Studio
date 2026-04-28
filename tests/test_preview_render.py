@@ -1,4 +1,4 @@
-"""Тесты для preview_render: lazy-генерация миниатюр и full-страниц с диск-кэшем."""
+"""Tests for preview_render: lazy generation of thumbnails and full pages with disk cache."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -8,7 +8,7 @@ import pytest
 
 @pytest.fixture
 def pdf_doc(tmp_path):
-    """Создаёт минимальный валидный 3-страничный PDF через PyMuPDF."""
+    """Create a minimal valid 3-page PDF via PyMuPDF."""
     import fitz
     docs = tmp_path / "docs" / "doc1"
     docs.mkdir(parents=True)
@@ -99,9 +99,8 @@ def test_render_page_for_image_only_page_1_valid(tmp_path):
 
 
 def test_render_page_validates_against_stale_cache(pdf_doc):
-    """Stale cache (например, после замены original.pdf на более короткий) не должен
-    затенять ValueError для невалидного page_num. Регрессионный тест к багу I1
-    из код-ревью Task 3."""
+    """Stale cache (e.g. after replacing original.pdf with a shorter one) must not hide
+    a ValueError for an invalid page_num. Regression test for bug I1 from code review Task 3."""
     from app import preview_render, files
     data_dir, doc_id = pdf_doc  # 3-page PDF
     files.ensure_preview_dir(data_dir, doc_id)
@@ -118,7 +117,7 @@ def test_get_progress_returns_none_when_not_rendering():
 
 def test_render_thumbs_updates_progress_during_batch(pdf_doc):
     """While render_thumbs is running, on_page callback fires per page;
-    after it returns, progress is cleared back to None.
+    after it returns, progress is cleared to None.
     """
     from app import preview_render
     data_dir, doc_id = pdf_doc

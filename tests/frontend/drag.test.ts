@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { handleDrop, startDocDrag } from '../../app/static/src/drag';
 
-// jsdom не реализует DataTransfer/DragEvent — минимальный полифил под наш use-case.
+// jsdom does not implement DataTransfer/DragEvent — minimal polyfill for our use-case.
 beforeAll(() => {
   if (typeof (globalThis as any).DataTransfer === 'undefined') {
     class FileListPolyfill extends Array<File> {}

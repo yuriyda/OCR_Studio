@@ -1,4 +1,4 @@
-"""Тесты для app/preview.py."""
+"""Tests for app/preview.py."""
 from app import preview
 
 

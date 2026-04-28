@@ -1,4 +1,4 @@
-"""Unit-тесты для app/files.py."""
+"""Unit tests for app/files.py."""
 from pathlib import Path
 
 from app import files

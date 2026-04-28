@@ -1,12 +1,12 @@
 /**
- * Render списка проектов в sidebar с индикацией активного, бейджами и размерами.
+ * Render the project list in the sidebar with active indicator, badges, and sizes.
  *
- * Редактирование:
- * - INBOX_ID = 1 — захардкожено, соответствует `app/storage.py: INBOX_ID = 1`.
- *   Inbox нельзя удалить/переименовать через UI, поэтому menu для него не рендерится.
- * - Имя проекта проходит через escHtml (DOM-based) для защиты от XSS.
- * - formatBytes — из icons.ts; ничего не делаем сами.
- * - Не добавлять click-обработчики здесь; они навешиваются в main.ts через event delegation.
+ * Maintenance notes:
+ * - INBOX_ID = 1 — hardcoded, matches `app/storage.py: INBOX_ID = 1`.
+ *   Inbox cannot be deleted/renamed via UI, so no menu is rendered for it.
+ * - Project names pass through escHtml (DOM-based) for XSS protection.
+ * - formatBytes — from icons.ts; nothing computed here directly.
+ * - Do not attach click handlers here; they are added in main.ts via event delegation.
  */
 
 import type { Project } from './types';

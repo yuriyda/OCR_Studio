@@ -1,10 +1,10 @@
 """
-Репозитории для работы с метаданными проектов и документов.
+Repositories for project and document metadata.
 
-Редактирование:
-- Все обращения к таблицам projects/documents идут только через эти классы.
-- Не использовать sqlite_connection напрямую из main.py или роутов.
-- Даты сохраняются и читаются как ISO-8601 UTC через datetime.
+Maintenance notes:
+- All access to the projects/documents tables must go through these classes.
+- Do not use sqlite connections directly from main.py or route handlers.
+- Dates are stored and read as ISO-8601 UTC via datetime.
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ MAX_NAME_LEN = 100
 
 
 class ProjectError(Exception):
-    """Ошибка операций над проектами (валидация, уникальность, защита Inbox)."""
+    """Error from project operations (validation, uniqueness, Inbox protection)."""
 
 
 def _now_iso() -> str:
@@ -95,12 +95,12 @@ ALLOWED_SORT = {"created": "created_at", "name": "filename", "size": "size_bytes
 
 
 class DocumentRepo:
-    """CRUD-репозиторий для таблицы documents.
+    """CRUD repository for the documents table.
 
-    Правила редактирования:
-    - Все колонки сортировки проверяются через ALLOWED_SORT (защита от SQL-инъекций).
-    - Метод update() принимает только именованные аргументы; пустой вызов — no-op.
-    - Каскадное удаление документов при удалении проекта обеспечивается ON DELETE CASCADE в схеме БД.
+    Maintenance notes:
+    - All sort columns are validated through ALLOWED_SORT (SQL injection guard).
+    - update() accepts only keyword arguments; an empty call is a no-op.
+    - Cascade deletion of documents on project deletion is handled by ON DELETE CASCADE in the schema.
     """
 
     def __init__(self, conn: sqlite3.Connection) -> None:
@@ -194,7 +194,7 @@ class DocumentRepo:
         return [r["id"] for r in rows]
 
     def queued_in_project(self, project_id: int) -> list[dict]:
-        """Список queued документов в конкретном проекте, в порядке создания."""
+        """Return queued documents in the given project, ordered by creation time."""
         cur = self.conn.execute(
             "SELECT * FROM documents WHERE project_id = ? AND status = 'queued' "
             "ORDER BY created_at ASC",

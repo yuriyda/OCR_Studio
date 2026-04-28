@@ -1,27 +1,27 @@
 """
-Unit-тесты для app/ocr_engine.py.
+Unit tests for app/ocr_engine.py.
 
-Редактирование:
-- Тесты покрывают поведение progress_callback в process_file.
-- Моки используются для изоляции от PaddleOCR и fitz.
-- Не удалять существующие тесты без согласования.
-- Lang-параметр удалён из process_file (ux-cleanup §2) — тесты не передают lang.
-- ВАЖНО: импорт ocr_engine выполняется внутри каждого теста, а не на уровне модуля.
-  Это необходимо, потому что другие тесты (test_api.py) сбрасывают sys.modules["app.*"]
-  и переимпортируют модули заново; верхнеуровневая ссылка оказалась бы устаревшей.
+Maintenance notes:
+- Tests cover progress_callback behaviour in process_file.
+- Mocks are used to isolate from PaddleOCR and fitz.
+- Do not remove existing tests without discussion.
+- The lang parameter was removed from process_file (ux-cleanup §2) — tests do not pass lang.
+- IMPORTANT: ocr_engine is imported inside each test, not at module level.
+  This is required because other tests (test_api.py) reset sys.modules["app.*"]
+  and re-import modules; a top-level reference would become stale.
 """
 import sys
 from unittest.mock import MagicMock, patch
 
 
 def _get_ocr_engine_module():
-    """Возвращает актуальный модуль app.ocr_engine из sys.modules."""
+    """Return the current app.ocr_engine module from sys.modules."""
     import importlib
     return importlib.import_module("app.ocr_engine")
 
 
 def test_process_file_calls_progress_callback_per_page(tmp_path):
-    """Callback вызывается с (current_page, total_pages) для каждой страницы."""
+    """Callback is called with (current_page, total_pages) for each page."""
     fake_pdf = tmp_path / "x.pdf"
     fake_pdf.write_bytes(b"%PDF-1.4 stub")
 
@@ -49,7 +49,7 @@ def test_process_file_calls_progress_callback_per_page(tmp_path):
 
 
 def test_process_file_works_without_callback(tmp_path):
-    """Без callback не падает (обратная совместимость)."""
+    """Does not raise without a callback (backward compatibility)."""
     fake_pdf = tmp_path / "x.pdf"
     fake_pdf.write_bytes(b"%PDF-1.4 stub")
 
@@ -71,7 +71,7 @@ def test_process_file_works_without_callback(tmp_path):
 
 
 def test_process_file_image_callback_single_page(tmp_path):
-    """Для картинки — один вызов callback (1, 1)."""
+    """For an image — one callback call (1, 1)."""
     fake_img = tmp_path / "x.png"
     fake_img.write_bytes(b"\x89PNG stub")
 
@@ -93,11 +93,11 @@ def test_process_file_image_callback_single_page(tmp_path):
 
 
 def test_progress_callback_called_at_start_and_end_of_each_page(monkeypatch, tmp_path):
-    """Callback должен вызываться 2 раза на страницу: до и после обработки.
+    """Callback must be called twice per page: before and after processing.
 
-    После рефакторинга process_file: PDF-страницы обрабатываются per-page через
-    реальный split (fitz). Для image-файлов — callback вызывается 2 раза (1, 1).
-    Этот тест проверяет image path: 2 вызова (start + end).
+    After the process_file refactor: PDF pages are processed per-page via real split (fitz).
+    For image files — callback is called twice with (1, 1).
+    This test checks the image path: 2 calls (start + end).
     """
     import fitz
     from unittest.mock import MagicMock, patch
@@ -123,11 +123,11 @@ def test_progress_callback_called_at_start_and_end_of_each_page(monkeypatch, tmp
             str(pdf_path),
             progress_callback=lambda c, t: calls.append((c, t)),
         )
-    # 2 вызова на страницу × 3 страницы = 6 минимум.
+    # 2 calls per page × 3 pages = at least 6.
     assert len(calls) >= 6, f"expected >=6 callback calls, got {len(calls)}: {calls}"
-    # Первый вызов — start of page 1.
+    # First call — start of page 1.
     assert calls[0][0] == 1
-    # Последний вызов — end of last page.
+    # Last call — end of last page.
     assert calls[-1][0] == 3
 
 
@@ -220,8 +220,8 @@ def test_process_file_image_single_predict(monkeypatch, tmp_path):
 
 
 def test_process_file_iterates_generator_lazily(monkeypatch, tmp_path):
-    """process_file должен итерировать engine.predict() как ленивый generator,
-    не материализуя через list() — иначе progress_callback фейковый.
+    """process_file must iterate engine.predict() as a lazy generator,
+    not materialise it via list() — otherwise progress_callback is fake.
     """
     import importlib
     from unittest.mock import MagicMock, patch

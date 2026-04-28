@@ -1,13 +1,13 @@
 /**
- * Клиентская валидация файлов перед загрузкой.
+ * Client-side file validation before upload.
  *
- * Редактирование:
- * - Граничное условие — строго `>` (файл ровно в лимит проходит, как и на бэке
- *   в `app/main.py: _check_size`). Не менять без правки backend.
- * - `filterBySize` — чистая функция: возвращает `ok`-список и вызывает callback
- *   с rejected. Не трогает DOM/toast — это слой выше (main.ts).
- * - `formatTooLargeMessage` — humanized RU-сообщение. Перевод на en появится
- *   в i18n bundle, эта функция останется RU-only fallback.
+ * Maintenance notes:
+ * - Boundary condition — strictly `>` (a file exactly at the limit passes, same as the backend
+ *   in `app/main.py: _check_size`). Do not change without updating the backend.
+ * - `filterBySize` — pure function: returns the `ok` list and calls the callback
+ *   with rejected files. Does not touch DOM/toast — that is the responsibility of the layer above (main.ts).
+ * - `formatTooLargeMessage` — humanized RU message. An EN translation will appear
+ *   in the i18n bundle; this function will remain as a RU-only fallback.
  */
 
 export function filterBySize(

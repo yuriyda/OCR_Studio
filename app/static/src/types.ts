@@ -1,21 +1,21 @@
 /**
- * Общие TypeScript-типы для frontend OCR Studio.
+ * Shared TypeScript types for the OCR Studio frontend.
  *
- * Редактирование:
- * - Эти типы — контракт между frontend и backend API. Изменения должны коррелировать
- *   с моделями `app/storage.py` (Project, Document) и schemas `app/main.py`
+ * Maintenance notes:
+ * - These types are the contract between the frontend and the backend API. Changes must be
+ *   correlated with models in `app/storage.py` (Project, Document) and schemas in `app/main.py`
  *   (`_doc_response`, `/api/system`, `/api/limits`, `/api/ocr`, `/api/recognize`,
  *   `/api/engine/preload`, `/api/preview/{id}`).
- * - При расширении DocStatus / OcrFormat / LangCode — обновить i18n bundles
- *   (`i18n/ru.json`, `i18n/en.json`) с соответствующими ключами `doc.status.*` / `tab.*`.
- * - ID документов — string (UUID hex из `app/db.py: documents.id TEXT PRIMARY KEY`).
- *   ID проектов — number (`projects.id INTEGER PRIMARY KEY AUTOINCREMENT`).
- * - Поля прогресса (`page_count`, `current_page`, `progress_percent`, `elapsed_seconds`,
- *   `eta_seconds`) и timestamps (`started_at`, `finished_at`) бэкенд возвращает всегда:
- *   `T | null`, не `T?`. Не делать их optional, иначе `noUncheckedIndexedAccess` пропустит баг.
- * - Не добавлять методы или утилиты — этот модуль только декларации типов.
- * - `created_at` приходит как ISO-8601 TEXT (CHECK constraint на формат добавлен в db.py).
- *   На стороне TS — string. Native Date не используем, чтобы избежать драм с UTC/локалью.
+ * - When extending DocStatus / OcrFormat / LangCode — update i18n bundles
+ *   (`i18n/ru.json`, `i18n/en.json`) with the corresponding `doc.status.*` / `tab.*` keys.
+ * - Document IDs — string (UUID hex from `app/db.py: documents.id TEXT PRIMARY KEY`).
+ *   Project IDs — number (`projects.id INTEGER PRIMARY KEY AUTOINCREMENT`).
+ * - Progress fields (`page_count`, `current_page`, `progress_percent`, `elapsed_seconds`,
+ *   `eta_seconds`) and timestamps (`started_at`, `finished_at`) are always returned by the
+ *   backend as `T | null`, not `T?`. Do not make them optional — `noUncheckedIndexedAccess` would miss the bug.
+ * - Do not add methods or utilities — this module contains only type declarations.
+ * - `created_at` arrives as ISO-8601 TEXT (CHECK constraint on format added in db.py).
+ *   On the TS side — string. Native Date is not used to avoid UTC/locale issues.
  */
 
 export type LangCode = 'ru' | 'en';
@@ -63,7 +63,7 @@ export interface SystemInfo {
   cuda: string | null;
   vram_gb: number | null;
   engine_lang: LangCode | null;
-  /** Бэкенд возвращает только 'loading' | 'ready'. 'idle' — frontend-only initial cache. */
+  /** Backend returns only 'loading' | 'ready'. 'idle' — frontend-only initial cache value. */
   engine_status: 'ready' | 'loading' | 'idle';
   engine_pipeline: PipelineModel[];
 }
@@ -100,6 +100,6 @@ export interface PreviewInfo {
 }
 
 export interface PreviewThumbs {
-  /** Base64-encoded JPEG bytes (без data: prefix). */
+  /** Base64-encoded JPEG bytes (without data: prefix). */
   pages: string[];
 }

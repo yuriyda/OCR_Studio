@@ -1,4 +1,4 @@
-"""Unit-тесты для app/storage.py — ProjectRepo и DocumentRepo."""
+"""Unit tests for app/storage.py — ProjectRepo and DocumentRepo."""
 import pytest
 
 from app import db

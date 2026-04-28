@@ -1,21 +1,21 @@
 /**
- * i18n loader для UI-локализации (RU/EN).
+ * i18n loader for UI localisation (RU/EN).
  *
- * Редактирование:
- * - Bundles бандлятся Vite во время билда через `import './i18n/{ru,en}.json'`
- *   (resolveJsonModule=true в tsconfig). Async fetch не используется.
- * - При добавлении новой строки UI: ключ + значение должны появиться в ОБОИХ
- *   bundles одновременно (`ru.json` и `en.json`). Не добавлять только в один —
- *   `t()` отдаст ключ как fallback, что выглядит как баг.
- * - При смене языка вызывается `loadLang(lang)`. Происходит автоматически:
- *   (1) `applyI18nToDom(document)` обновляет статичные `[data-i18n]` / `[data-i18n-placeholder]`
- *   атрибуты, (2) диспатчится typed CustomEvent 'i18n:changed' с `detail.lang` —
- *   динамические компоненты (statusbar, project list) подписываются и перерендериваются сами.
- * - `applyI18nToDom(root)` — utility, можно вызвать вручную для отдельного поддерева
- *   (например, после рендера динамического HTML с `data-i18n` маркерами).
- * - Размещай `data-i18n` ТОЛЬКО на leaf-элементах (содержащих только текст). Иначе
- *   `textContent` затрёт дочерние ноды (например, иконку <svg>).
- * - Не добавлять loader для произвольных языков — это не ICU, локалей всего две.
+ * Maintenance notes:
+ * - Bundles are bundled by Vite at build time via `import './i18n/{ru,en}.json'`
+ *   (resolveJsonModule=true in tsconfig). Async fetch is not used.
+ * - When adding a new UI string: key + value must appear in BOTH bundles at the same time
+ *   (`ru.json` and `en.json`). Adding to only one — `t()` returns the key as fallback,
+ *   which looks like a bug.
+ * - Language change calls `loadLang(lang)`. This automatically:
+ *   (1) runs `applyI18nToDom(document)` to update static `[data-i18n]` / `[data-i18n-placeholder]`
+ *   attributes, (2) dispatches a typed CustomEvent 'i18n:changed' with `detail.lang` —
+ *   dynamic components (statusbar, project list) subscribe and re-render themselves.
+ * - `applyI18nToDom(root)` — utility, can be called manually for a specific subtree
+ *   (e.g. after rendering dynamic HTML with `data-i18n` markers).
+ * - Place `data-i18n` ONLY on leaf elements (containing text only). Otherwise
+ *   `textContent` overwrites child nodes (e.g. an <svg> icon).
+ * - Do not add loaders for arbitrary languages — this is not ICU, there are only two locales.
  */
 
 import ru from './i18n/ru.json';

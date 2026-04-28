@@ -1,12 +1,12 @@
 """
-Конвертеры результата OCR: markdown → plain txt, markdown → docx.
+OCR result converters: markdown → plain text, markdown → docx.
 
-Редактирование:
-- md_to_txt: regex-стрипы только базовые (заголовки, bold/italic).
-- md_to_docx: рендерится через markdown→HTML→html_to_docx walker. HTML парсится
-  BeautifulSoup, walk по DOM строит python-docx структуры. Inline-парсинг (bold/italic/
-  code/links) делегирован markdown library — не дублировать.
-- Не добавлять зависимости — bs4, markdown, python-docx уже в requirements.
+Maintenance notes:
+- md_to_txt: only basic regex strips (headings, bold/italic).
+- md_to_docx: rendered via markdown→HTML→html_to_docx walker. HTML is parsed by
+  BeautifulSoup; DOM walk builds python-docx structures. Inline parsing (bold/italic/
+  code/links) is delegated to the markdown library — do not duplicate.
+- Do not add dependencies — bs4, markdown, python-docx are already in requirements.
 """
 from __future__ import annotations
 
@@ -37,8 +37,7 @@ _HEADING_TAGS = {"h1": 1, "h2": 2, "h3": 3, "h4": 4, "h5": 4, "h6": 4}
 def html_to_docx(html: str) -> bytes:
     """Walk sanitized HTML → python-docx structures → bytes.
 
-    Поддерживает (в Task 7): h1-h6, p. Списки/inline/code/blockquote/hr/tables —
-    в следующих задачах 8-11.
+    Supported elements: h1-h6, p, lists, inline formatting, code blocks, blockquotes, hr, tables.
     """
     doc = Document()
     style = doc.styles["Normal"]
@@ -96,7 +95,7 @@ def _walk_block(doc, node):
                 _walk_inline(p, sub)
         return
     if name == "hr":
-        # Visual separator — empty paragraph; python-docx не имеет dedicated horizontal rule.
+        # Visual separator — empty paragraph; python-docx has no dedicated horizontal rule.
         doc.add_paragraph("")
         return
     if name == "table":
@@ -139,7 +138,7 @@ def _walk_inline(para, node):
         elif cname == "a":
             href = child.get("href", "")
             text = child.get_text()
-            # MVP: текст + URL в скобках. Real OOXML hyperlink — отдельная задача.
+            # MVP: text + URL in parentheses. A real OOXML hyperlink is a separate task.
             if href:
                 para.add_run(f"{text} ({href})")
             else:
@@ -154,7 +153,7 @@ def _walk_inline(para, node):
 def md_to_docx(md: str) -> bytes:
     """Convert markdown to a .docx file. Returns bytes.
 
-    Делегирует: markdown → HTML (preview.markdown_to_html) → docx (html_to_docx).
+    Delegates: markdown → HTML (preview.markdown_to_html) → docx (html_to_docx).
     """
     html = _preview.markdown_to_html(md or "")
     return html_to_docx(html)

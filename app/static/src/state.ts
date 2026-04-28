@@ -1,13 +1,13 @@
 /**
- * Локальное состояние UI с persistence в localStorage.
+ * Local UI state with localStorage persistence.
  *
- * Редактирование:
- * - Не хранить здесь динамические данные (документы, проекты — это API-кэш в main.ts).
- * - Только пользовательские предпочтения: активный проект, язык UI, режим сортировки,
- *   размеры resizable панелей.
- * - При смене формы InternalState — БУМПНУТЬ KEY ('ocr-state-v2' → '...-v3') и
- *   сделать миграцию или fallback к defaults.
- * - `state.load()` ВСЕГДА вызывается перед чтением (в `boot()` в main.ts).
+ * Maintenance notes:
+ * - Do not store dynamic data here (documents, projects — those are API cache in main.ts).
+ * - Only user preferences: active project, UI language, sort mode,
+ *   resizable panel sizes.
+ * - When InternalState shape changes — BUMP KEY ('ocr-state-v2' → '...-v3') and
+ *   add a migration or fallback to defaults.
+ * - `state.load()` is ALWAYS called before reading (in `boot()` in main.ts).
  */
 
 import type { LangCode } from './types';
@@ -39,7 +39,7 @@ function persist(): void {
   try {
     localStorage.setItem(KEY, JSON.stringify(internal));
   } catch {
-    // private mode, quota — игнорируем
+    // private mode or quota exceeded — ignore
   }
 }
 

@@ -1,10 +1,10 @@
 """
-Конвертация markdown/docx/text в безопасный HTML для preview.
+Conversion of markdown/docx/text to safe HTML for preview.
 
-Редактирование:
-- Любой HTML, попадающий в DOM на фронте, должен пройти sanitize_html().
-- Allow-list тегов и атрибутов — единственное место правды; не дублировать.
-- DOCX-конвертация добавляется в Task 11 (этот модуль расширяется).
+Maintenance notes:
+- Any HTML that reaches the frontend DOM must pass through sanitize_html().
+- The tag and attribute allow-list is the single source of truth; do not duplicate it.
+- DOCX conversion was added in Task 11 (this module was extended at that point).
 """
 from __future__ import annotations
 

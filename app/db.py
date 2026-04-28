@@ -1,12 +1,12 @@
 """
-SQLite-подключение, инициализация схемы и миграции для OCR-сервиса.
+SQLite connection, schema initialisation, and migrations for the OCR service.
 
-Редактирование:
-- Любое изменение схемы — через новую функцию миграции _migrate_to_vN.
-- Не менять существующие миграции после релиза — только добавлять новые.
-- Версия схемы хранится в таблице schema_version.
-- Для CHECK-constraints на даты используется GLOB '20[0-9][0-9]-*' —
-  принимает ISO-8601 префикс (с/без таймзоны), отклоняет произвольный текст.
+Maintenance notes:
+- Every schema change must go through a new _migrate_to_vN function.
+- Do not modify existing migrations after release — only add new ones.
+- Schema version is tracked in the schema_version table.
+- Date CHECK constraints use GLOB '20[0-9][0-9]-*' —
+  accepts ISO-8601 prefixes (with/without timezone), rejects arbitrary text.
 """
 import sqlite3
 from pathlib import Path
@@ -15,7 +15,7 @@ CURRENT_VERSION = 4
 
 
 def get_connection(db_path: Path) -> sqlite3.Connection:
-    """Открыть соединение с включёнными foreign keys и WAL."""
+    """Open a connection with foreign keys enabled and WAL mode."""
     conn = sqlite3.connect(str(db_path))
     conn.execute("PRAGMA foreign_keys = ON")
     conn.row_factory = sqlite3.Row
@@ -23,7 +23,7 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
 
 
 def init(db_path: Path) -> None:
-    """Создать БД (если нет) и применить миграции до CURRENT_VERSION."""
+    """Create the database (if absent) and apply migrations up to CURRENT_VERSION."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path))
     conn.execute("PRAGMA journal_mode = WAL")
@@ -38,7 +38,7 @@ def init(db_path: Path) -> None:
             _migrate_to_v1(conn)
             conn.execute("INSERT INTO schema_version VALUES (1)")
         if current < 2:
-            # _migrate_to_v2 включает INSERT INTO schema_version VALUES (2) в свою транзакцию.
+            # _migrate_to_v2 includes INSERT INTO schema_version VALUES (2) inside its own transaction.
             _migrate_to_v2(conn)
         if current < 3:
             _migrate_to_v3(conn)
@@ -82,7 +82,7 @@ def _migrate_to_v1(conn: sqlite3.Connection) -> None:
 
 
 _V2_STATEMENTS = [
-    # Очистка zombie temp-таблиц от прерванной миграции (если есть).
+    # Clean up zombie temp tables left by a previously interrupted migration (if any).
     "DROP TABLE IF EXISTS projects_v2",
     "DROP TABLE IF EXISTS documents_v2",
     """CREATE TABLE projects_v2 (
@@ -118,25 +118,25 @@ _V2_STATEMENTS = [
 
 
 def _migrate_to_v2(conn: sqlite3.Connection) -> None:
-    """Добавить CHECK (created_at GLOB '20[0-9][0-9]-*') на projects и documents.
+    """Add CHECK (created_at GLOB '20[0-9][0-9]-*') to projects and documents.
 
-    SQLite не поддерживает ALTER TABLE ADD CONSTRAINT — пересоздаём таблицы
-    через temp-name + INSERT SELECT + DROP + RENAME.
+    SQLite does not support ALTER TABLE ADD CONSTRAINT — tables are recreated
+    via temp-name + INSERT SELECT + DROP + RENAME.
 
-    Атомарность: оборачиваем все DDL-statements + version row в одну транзакцию
-    (BEGIN/COMMIT/ROLLBACK). Если процесс падает в середине — `ROLLBACK` не успеет,
-    но при следующем `init()` `current` всё ещё будет 1, миграция повторится с
-    `DROP TABLE IF EXISTS projects_v2` в начале (cleanup zombies).
+    Atomicity: all DDL statements + version row are wrapped in one transaction
+    (BEGIN/COMMIT/ROLLBACK). If the process crashes mid-way, ROLLBACK won't run,
+    but on the next init() call `current` will still be 1 and the migration will
+    retry starting with DROP TABLE IF EXISTS projects_v2 (zombie cleanup).
 
-    FK на время миграции выключаем (иначе DROP TABLE projects → cascade-delete
-    для documents). Возвращаем FK в исходное состояние в finally.
+    FK constraints are disabled during migration (otherwise DROP TABLE projects
+    triggers a cascade-delete on documents). Restored to original state in finally.
 
-    GLOB '20[0-9][0-9]-*' — допустимый диапазон годов: 2000-2099. После 2099
-    добавить v3 миграцию с расширением паттерна.
+    GLOB '20[0-9][0-9]-*' — valid year range: 2000-2099. After 2099 add a v3
+    migration to extend the pattern.
     """
     fk_was_on = conn.execute("PRAGMA foreign_keys").fetchone()[0]
-    # Python sqlite3 в дефолте имеет implicit transaction management;
-    # переходим в autocommit, чтобы вручную управлять BEGIN/COMMIT.
+    # Python sqlite3 defaults to implicit transaction management;
+    # switch to autocommit so we can control BEGIN/COMMIT manually.
     old_iso = conn.isolation_level
     conn.isolation_level = None
     conn.execute("PRAGMA foreign_keys = OFF")
@@ -160,19 +160,18 @@ def _migrate_to_v2(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_to_v3(conn: sqlite3.Connection) -> None:
-    """Добавить stage / stage_updated_at колонки для отчётности о прогрессе.
+    """Add stage / stage_updated_at columns for progress reporting.
 
-    Значения stage (в `documents.stage`):
-    - NULL — обычное состояние (queued/done/error не нуждаются в этапе)
-    - 'engine_loading' — worker ждёт `ocr_engine.get_engine()` (~30s при первом OCR)
-    - 'ocr' — engine.predict() в работе; `current_page`/`page_count`/`progress_percent`
-              обновляются параллельно
+    Stage values in `documents.stage`:
+    - NULL    — neutral state (queued/done/error do not need a stage)
+    - 'engine_loading' — worker is waiting for `ocr_engine.get_engine()` (~30 s on first OCR)
+    - 'ocr'   — engine.predict() is running; `current_page`/`page_count`/`progress_percent`
+                are updated concurrently
 
-    `stage_updated_at` — ISO-8601 timestamp последнего обновления stage. Используется
-    для будущей heartbeat-проверки «не завис ли worker».
+    `stage_updated_at` — ISO-8601 timestamp of the last stage update.
+    Intended for future heartbeat checks to detect a stuck worker.
 
-    ALTER TABLE ADD COLUMN безопасен для добавления nullable колонок — пересоздание
-    таблицы не требуется.
+    ALTER TABLE ADD COLUMN is safe for nullable columns — no table recreation needed.
     """
     conn.execute("ALTER TABLE documents ADD COLUMN stage TEXT")
     conn.execute("ALTER TABLE documents ADD COLUMN stage_updated_at TEXT")
@@ -183,6 +182,6 @@ def _migrate_to_v4(conn: sqlite3.Connection) -> None:
 
     Examples: 'layout', 'text', 'table', 'formula', 'chart'. Worker writes via
     stage_callback installed in app/ocr_engine.py. UI shows together with stage:
-    «Страница N/M: <stage_detail>».
+    "Page N/M: <stage_detail>".
     """
     conn.execute("ALTER TABLE documents ADD COLUMN stage_detail TEXT")

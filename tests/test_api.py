@@ -1,10 +1,10 @@
 """
-Integration-тесты API через FastAPI TestClient.
+API integration tests via FastAPI TestClient.
 
-Редактирование:
-- Добавлять новые тесты, не удалять существующие без согласования.
-- OCR-движок всегда мокается, чтобы не грузить PaddleOCR в тестовой среде.
-- При добавлении новых роутов — добавлять соответствующие тесты здесь.
+Maintenance notes:
+- Add new tests; do not remove existing ones without discussion.
+- The OCR engine is always mocked so PaddleOCR is never loaded in the test environment.
+- When adding new routes, add the corresponding tests here.
 """
 import asyncio
 import importlib
@@ -19,15 +19,15 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture
 def client(tmp_data_dir, monkeypatch):
-    # paddleocr stubs устанавливаются на module level через tests/conftest.py:stub_paddleocr_modules
+    # paddleocr stubs are installed at module level via tests/conftest.py:stub_paddleocr_modules
 
-    # Перезагружаем модули, чтобы учесть заглушки (если уже импортированы ранее)
+    # Reload modules to pick up stubs (in case they were already imported earlier)
     for mod in list(sys.modules.keys()):
         if mod.startswith("app"):
             del sys.modules[mod]
 
     async def _noop_worker():
-        await asyncio.sleep(3600)  # не обрабатывает очередь в тестах
+        await asyncio.sleep(3600)  # does not process the queue in tests
 
     with patch("app.ocr_engine.process_file", return_value="# stub"), \
          patch("app.ocr_engine.get_engine"), \
@@ -189,7 +189,7 @@ def test_projects_total_bytes(client):
 
 
 def _force_done(doc_id, content="# stub", fmt="md"):
-    """Помощник: помечает документ done и кладёт result-файл."""
+    """Helper: marks the document as done and writes the result file."""
     from app import db, main, files as files_mod
     from app.storage import DocumentRepo
     conn = db.get_connection(main.DB_PATH)
@@ -235,15 +235,15 @@ def test_rendered_docx_returns_html(client):
 
 
 def test_recovery_on_restart(tmp_data_dir):
-    """Документ в processing → после повторного startup → queued."""
+    """Document in processing state → after restart startup → queued."""
     from unittest.mock import patch
-    # Полная установка fixture-окружения вручную (для повторного запуска TestClient)
+    # Full fixture setup manually (for running a second TestClient)
     with patch("app.ocr_engine.process_file", return_value="# stub"), \
          patch("app.ocr_engine.get_engine"):
         from app import main
         main.DATA_DIR = tmp_data_dir
         main.DB_PATH = tmp_data_dir / "data.db"
-        # Также мокаем worker, чтобы он не съел очередь между двумя TestClient
+        # Also mock worker so it does not consume the queue between the two TestClient instances
         async def _noop_worker():
             while True:
                 import asyncio
@@ -257,7 +257,7 @@ def test_recovery_on_restart(tmp_data_dir):
                 conn = db.get_connection(main.DB_PATH)
                 DocumentRepo(conn).update(doc_id, status="processing")
                 conn.close()
-            # Закрыли TestClient — теперь второй запуск (новый startup)
+            # Closed TestClient — now second run (new startup)
             with TestClient(main.app) as c:
                 r = c.get("/api/status").json()
                 target = next(d for d in r if d["id"] == doc_id)
@@ -265,7 +265,7 @@ def test_recovery_on_restart(tmp_data_dir):
 
 
 def test_orphan_files_cleaned(client, tmp_data_dir):
-    """FS-папка без записи в БД → удалена run_orphan_cleanup."""
+    """FS directory with no DB record → deleted by run_orphan_cleanup."""
     orphan = tmp_data_dir / "docs" / "orphan_id"
     orphan.mkdir()
     (orphan / "original.pdf").write_bytes(b"x")
@@ -276,7 +276,7 @@ def test_orphan_files_cleaned(client, tmp_data_dir):
 
 
 def test_ghost_record_marked_error(client, tmp_data_dir):
-    """Запись в БД без файлов на диске → status=error."""
+    """DB record with no files on disk → status=error."""
     upload = _upload(client).json()
     doc_id = upload["ids"][0]
     import shutil
@@ -290,12 +290,12 @@ def test_ghost_record_marked_error(client, tmp_data_dir):
 
 
 def test_page_progress_updates_during_processing(tmp_data_dir, monkeypatch):
-    """progress_percent обновляется через callback при OCR PDF."""
+    """progress_percent is updated via callback during PDF OCR."""
     from unittest.mock import patch
     from app import main, db
     from app.storage import DocumentRepo
 
-    # Conftest stubs paddleocr at module load; clear app.* to ensure fresh import after data dir override
+    # Conftest stubs paddleocr at module load; clear app.* to ensure a fresh import after data dir override
     for mod in list(sys.modules.keys()):
         if mod.startswith("app"):
             del sys.modules[mod]
@@ -323,7 +323,7 @@ def test_page_progress_updates_during_processing(tmp_data_dir, monkeypatch):
         with TestClient(main.app) as c:
             r = _upload(c)
             doc_id = r.json()["ids"][0]
-            # Auto-start больше нет: явно запускаем OCR через /api/recognize.
+            # Auto-start is gone: explicitly trigger OCR via /api/recognize.
             c.post("/api/recognize?project_id=1")
             import time
             for _ in range(50):
@@ -344,7 +344,7 @@ def test_project_zip_empty_project_returns_404(client):
 
 
 def test_project_zip_returns_zip_with_results(client):
-    """ZIP содержит только результаты завершённых документов."""
+    """ZIP contains only results of completed documents."""
     p = client.post("/api/projects", json={"name": "ZipP"}).json()
     upload = _upload(client, project_id=p["id"]).json()
     _force_done(upload["ids"][0], "# zipped result", "md")
@@ -360,7 +360,7 @@ def test_project_zip_returns_zip_with_results(client):
 
 
 def test_project_zip_skips_processing_documents(client):
-    """ZIP не включает документы со статусом != done."""
+    """ZIP does not include documents with status != done."""
     p = client.post("/api/projects", json={"name": "MixedZip"}).json()
     done_id = _upload(client, name="a.pdf", project_id=p["id"]).json()["ids"][0]
     queued_id = _upload(client, name="b.pdf", project_id=p["id"]).json()["ids"][0]
@@ -381,7 +381,7 @@ def test_project_zip_404_on_missing_project(client):
 
 
 def test_project_zip_disambiguates_duplicate_filenames(client):
-    """Два done-документа с одинаковым stem → второй получает суффикс _1."""
+    """Two done documents with the same stem → second one gets suffix _1."""
     p = client.post("/api/projects", json={"name": "Dups"}).json()
     a_id = _upload(client, name="report.pdf", project_id=p["id"]).json()["ids"][0]
     b_id = _upload(client, name="report.pdf", project_id=p["id"]).json()["ids"][0]
@@ -433,13 +433,13 @@ def test_limits_endpoint(client):
 
 
 def test_engine_preload_endpoint_removed(client):
-    """После Task 3: endpoint /api/engine/preload удалён, любой запрос → 404."""
+    """After Task 3: /api/engine/preload endpoint removed, any request → 404."""
     r = client.post("/api/engine/preload?lang=ru")
     assert r.status_code == 404
 
 
 def test_ocr_upload_returns_ids_warnings_shape(client):
-    """Новый shape /api/ocr: {ids, warnings, errors}."""
+    """New shape for /api/ocr: {ids, warnings, errors}."""
     r = _upload(client)
     assert r.status_code == 200
     data = r.json()
@@ -451,7 +451,7 @@ def test_ocr_upload_returns_ids_warnings_shape(client):
 
 
 def test_ocr_upload_does_not_start_processing(client):
-    """Upload оставляет документ в queued — НЕ запускает worker."""
+    """Upload leaves the document in queued state — does NOT start the worker."""
     r = _upload(client)
     doc_id = r.json()["ids"][0]
     status = client.get("/api/status").json()
@@ -460,7 +460,7 @@ def test_ocr_upload_does_not_start_processing(client):
 
 
 def test_recognize_endpoint_starts_queued_docs(client):
-    """POST /api/recognize?project_id=N кладёт queued докi в очередь."""
+    """POST /api/recognize?project_id=N places queued documents into the processing queue."""
     upload1 = _upload(client, name="a.pdf").json()
     upload2 = _upload(client, name="b.pdf").json()
     ids = upload1["ids"] + upload2["ids"]
@@ -486,7 +486,7 @@ def test_recognize_endpoint_zero_when_no_queued(client):
 
 
 def test_upload_pdf_long_returns_warning(client, monkeypatch):
-    """PDF >50 страниц должен вернуть warning long_processing с числом страниц."""
+    """PDF >50 pages must return a long_processing warning with page count."""
     import app.main as m
     monkeypatch.setattr(m, "_pdf_page_count", lambda _p: 87)
     r = _upload(client, name="big.pdf")
@@ -499,7 +499,7 @@ def test_upload_pdf_long_returns_warning(client, monkeypatch):
 
 
 def test_upload_pdf_short_no_warning(client, monkeypatch):
-    """PDF <=50 страниц не должен возвращать warning."""
+    """PDF <=50 pages must not return a warning."""
     import app.main as m
     monkeypatch.setattr(m, "_pdf_page_count", lambda _p: 5)
     r = _upload(client, name="small.pdf")
@@ -508,7 +508,7 @@ def test_upload_pdf_short_no_warning(client, monkeypatch):
 
 
 def test_upload_image_no_warning(client):
-    """Изображения никогда не дают warning."""
+    """Images never produce a warning."""
     files = [("files", ("x.png", io.BytesIO(b"fake-png"), "image/png"))]
     data_form = {"format": "md", "lang": "ru"}
     r = client.post("/api/ocr", files=files, data=data_form)
@@ -532,17 +532,17 @@ def test_source_endpoint_404_for_missing_doc(client):
 
 
 def test_system_engine_lang_is_fixed_ru(client):
-    """engine_lang всегда 'ru' независимо от состояния _engine (Task 2 fix)."""
+    """engine_lang is always 'ru' regardless of the _engine state (Task 2 fix)."""
     r = client.get("/api/system")
     assert r.status_code == 200
     assert r.json()["engine_lang"] == "ru"
 
 
 def test_markdown_endpoint_returns_raw_text_plain(client):
-    """Regression Task 9: /api/markdown/{id} отдаёт raw markdown как text/plain.
+    """Regression Task 9: /api/markdown/{id} returns raw markdown as text/plain.
 
-    Раньше endpoint возвращал JSON {"markdown": "..."}, и фронтенд через
-    `_text(resp)` показывал в <pre> буквальную строку JSON вместо markdown.
+    Previously the endpoint returned JSON {"markdown": "..."}, and the frontend
+    via `_text(resp)` showed the literal JSON string in <pre> instead of markdown.
     """
     upload = _upload(client).json()
     doc_id = upload["ids"][0]
@@ -557,8 +557,8 @@ def test_markdown_endpoint_returns_raw_text_plain(client):
 
 
 def test_rendered_endpoint_returns_html_text(client):
-    """Regression Task 9: /api/rendered/{id} отдаёт raw HTML как text/html,
-    чтобы фронтенд через `_text(resp)` мог сразу вставить в innerHTML."""
+    """Regression Task 9: /api/rendered/{id} returns raw HTML as text/html,
+    so the frontend via `_text(resp)` can insert it directly into innerHTML."""
     upload = _upload(client).json()
     doc_id = upload["ids"][0]
     _force_done(doc_id, "# Heading\n\nbody", "md")
@@ -571,7 +571,7 @@ def test_rendered_endpoint_returns_html_text(client):
 
 
 def test_status_includes_available_formats(client):
-    """Каждый doc в /api/status имеет поле available_formats: list[str]."""
+    """Every doc in /api/status has the field available_formats: list[str]."""
     upload = _upload(client).json()
     doc_id = upload["ids"][0]
     _force_done(doc_id, "# md content", "md")
@@ -583,7 +583,7 @@ def test_status_includes_available_formats(client):
 
 
 def test_status_available_formats_lists_multiple(client):
-    """Если в папке есть и md и docx — оба в списке."""
+    """If both md and docx exist in the directory — both appear in the list."""
     from app import files as files_mod
     import app.main as m
     upload = _upload(client).json()
@@ -597,12 +597,12 @@ def test_status_available_formats_lists_multiple(client):
 
 
 def test_worker_saves_only_result_md(tmp_data_dir):
-    """После OCR в папке doc-а только result.md, нет result.txt/docx."""
+    """After OCR, the doc directory contains only result.md, not result.txt/docx."""
     from unittest.mock import patch
     from app import main, db, files as files_mod
     from app.storage import DocumentRepo
 
-    # Сбрасываем кэш модулей для чистого импорта с нужным DATA_DIR
+    # Reset module cache for a clean import with the correct DATA_DIR
     for mod in list(sys.modules.keys()):
         if mod.startswith("app"):
             del sys.modules[mod]
@@ -619,7 +619,7 @@ def test_worker_saves_only_result_md(tmp_data_dir):
             upload = _upload(c).json()
             doc_id = upload["ids"][0]
 
-            # Форсируем format=docx, чтобы убедиться что worker игнорирует его при сохранении
+            # Force format=docx to verify the worker ignores it when saving
             conn = db.get_connection(main.DB_PATH)
             DocumentRepo(conn).update(doc_id, format="docx")
             conn.commit()
@@ -627,7 +627,7 @@ def test_worker_saves_only_result_md(tmp_data_dir):
 
             c.post("/api/recognize?project_id=1")
 
-            # Worker отрабатывает асинхронно — ждём done
+            # Worker runs asynchronously — wait for done
             import time
             for _ in range(30):
                 time.sleep(0.2)
@@ -637,7 +637,7 @@ def test_worker_saves_only_result_md(tmp_data_dir):
                 if status == "done":
                     break
 
-            # На диске только result.md (даже при format=docx в DB)
+            # Only result.md on disk (even when format=docx in DB)
             formats = files_mod.available_formats(main.DATA_DIR, doc_id)
             assert formats == ["md"], f"expected only ['md'], got {formats}"
 
@@ -647,7 +647,7 @@ def test_worker_saves_only_result_md(tmp_data_dir):
 # ---------------------------------------------------------------------------
 
 def test_result_endpoint_format_md_returns_existing(client):
-    """?format=md отдаёт result.md если существует."""
+    """?format=md returns result.md if it exists."""
     upload = _upload(client).json()
     doc_id = upload["ids"][0]
     _force_done(doc_id, "# md content", "md")
@@ -657,7 +657,7 @@ def test_result_endpoint_format_md_returns_existing(client):
 
 
 def test_result_endpoint_format_docx_lazy_generates_from_md(client):
-    """?format=docx — впервые конвертит из result.md, сохраняет, отдаёт."""
+    """?format=docx — converts from result.md on first request, saves it, then returns it."""
     from app import files as files_mod
     import app.main as m
     upload = _upload(client).json()
@@ -672,7 +672,7 @@ def test_result_endpoint_format_docx_lazy_generates_from_md(client):
 
 
 def test_result_endpoint_format_docx_idempotent(client):
-    """Повторный ?format=docx отдаёт с диска, не регенерит."""
+    """Repeated ?format=docx serves from disk, does not regenerate."""
     from app import files as files_mod
     import app.main as m
     upload = _upload(client).json()
@@ -693,7 +693,7 @@ def test_result_endpoint_format_docx_idempotent(client):
 
 
 def test_result_endpoint_format_unavailable_for_legacy(client):
-    """Legacy: на диске только result.txt, нет result.md → ?format=docx → 404."""
+    """Legacy: only result.txt on disk, no result.md → ?format=docx → 404."""
     from app import files as files_mod
     import app.main as m
     upload = _upload(client).json()
@@ -710,7 +710,7 @@ def test_result_endpoint_format_unavailable_for_legacy(client):
 
 
 def test_result_endpoint_format_native_for_legacy(client):
-    """Legacy с result.txt: ?format=txt отдаёт его."""
+    """Legacy with result.txt: ?format=txt returns it."""
     from app import files as files_mod
     import app.main as m
     upload = _upload(client).json()
@@ -728,7 +728,7 @@ def test_result_endpoint_format_native_for_legacy(client):
 
 
 def test_result_endpoint_default_format_uses_db_field(client):
-    """Без query param — backend использует documents.format из БД (backward compat)."""
+    """Without query param — backend uses documents.format from DB (backward compat)."""
     upload = _upload(client).json()
     doc_id = upload["ids"][0]
     _force_done(doc_id, "# md", "md")
@@ -737,7 +737,7 @@ def test_result_endpoint_default_format_uses_db_field(client):
 
 
 def test_markdown_endpoint_format_txt_lazy_generates(client):
-    """?format=txt — генерит txt из md, отдаёт plain text."""
+    """?format=txt — generates txt from md and returns plain text."""
     from app import files as files_mod
     import app.main as m
     upload = _upload(client).json()
@@ -753,7 +753,7 @@ def test_markdown_endpoint_format_txt_lazy_generates(client):
 
 
 def test_markdown_endpoint_default_returns_md(client):
-    """Без ?format — отдаёт result.md raw."""
+    """Without ?format — returns result.md raw."""
     upload = _upload(client).json()
     doc_id = upload["ids"][0]
     _force_done(doc_id, "# raw md", "md")
@@ -763,7 +763,7 @@ def test_markdown_endpoint_default_returns_md(client):
 
 
 def test_markdown_endpoint_format_unavailable_for_legacy(client):
-    """Legacy с result.docx без result.md → ?format=md → 404."""
+    """Legacy with result.docx but no result.md → ?format=md → 404."""
     from app import files as files_mod
     import app.main as m
     upload = _upload(client).json()
@@ -780,7 +780,7 @@ def test_markdown_endpoint_format_unavailable_for_legacy(client):
 
 
 def test_rendered_endpoint_format_md_returns_html_from_markdown(client):
-    """?format=md — markdown → HTML через markdown library + bleach."""
+    """?format=md — markdown → HTML via the markdown library + bleach."""
     upload = _upload(client).json()
     doc_id = upload["ids"][0]
     _force_done(doc_id, "# Heading\n\n| a | b |\n| --- | --- |\n| 1 | 2 |", "md")
@@ -792,7 +792,7 @@ def test_rendered_endpoint_format_md_returns_html_from_markdown(client):
 
 
 def test_rendered_endpoint_format_docx_lazy_renders_via_mammoth(client):
-    """?format=docx — лениво генерит result.docx, рендерит через mammoth."""
+    """?format=docx — lazily generates result.docx, renders it via mammoth."""
     from app import files as files_mod
     import app.main as m
     upload = _upload(client).json()
@@ -807,7 +807,7 @@ def test_rendered_endpoint_format_docx_lazy_renders_via_mammoth(client):
 
 
 def test_rendered_endpoint_format_unavailable_for_legacy(client):
-    """Legacy с result.txt → ?format=docx → 404 (нет md-источника для генерации)."""
+    """Legacy with result.txt → ?format=docx → 404 (no md source for generation)."""
     from app import files as files_mod
     import app.main as m
     upload = _upload(client).json()
@@ -824,9 +824,9 @@ def test_rendered_endpoint_format_unavailable_for_legacy(client):
 
 
 def test_upload_creates_doc_with_md_format_regardless_of_request(client):
-    """После Task 7: backend всегда создаёт doc с format='md'.
+    """Backend always creates a doc with format='md'.
 
-    Даже если клиент случайно отправил format=docx — игнорируется.
+    Even if the client accidentally sends format=docx — it is ignored.
     """
     import io
     files = [("files", ("a.png", io.BytesIO(b"fake"), "image/png"))]
@@ -843,7 +843,7 @@ def test_upload_creates_doc_with_md_format_regardless_of_request(client):
 # ---------------------------------------------------------------------------
 
 def _make_doc(client, tmp_data_dir, filename):
-    """Создаёт проект + документ с placeholder original-файлом. Возвращает (pid, did)."""
+    """Create a project + document with a placeholder original file. Returns (pid, did)."""
     from app import storage, db, files as files_mod
     conn = db.get_connection(tmp_data_dir / "data.db")
     pr = storage.ProjectRepo(conn)
@@ -1018,7 +1018,7 @@ def test_worker_sets_engine_loading_stage_when_engine_not_ready(tmp_data_dir):
 # ---------------------------------------------------------------------------
 
 def test_doc_response_engine_loading_label_includes_models(client, tmp_data_dir):
-    """stage_label для engine_loading включает упоминание моделей pipeline."""
+    """stage_label for engine_loading mentions pipeline model names."""
     from app import storage, db
     pid, did = _make_doc(client, tmp_data_dir, "x.pdf")
     conn = db.get_connection(tmp_data_dir / "data.db")
@@ -1035,7 +1035,7 @@ def test_doc_response_engine_loading_label_includes_models(client, tmp_data_dir)
 
 
 def test_doc_response_ocr_label_includes_pipeline_name(client, tmp_data_dir):
-    """stage_label для ocr включает имя pipeline."""
+    """stage_label for ocr includes the pipeline name."""
     from app import storage, db
     pid, did = _make_doc(client, tmp_data_dir, "x.pdf")
     conn = db.get_connection(tmp_data_dir / "data.db")
@@ -1054,7 +1054,7 @@ def test_doc_response_ocr_label_includes_pipeline_name(client, tmp_data_dir):
 
 
 def test_doc_response_ocr_label_with_stage_detail(client, tmp_data_dir):
-    """stage_label для ocr включает page info и stage_detail (sub-model name)."""
+    """stage_label for ocr includes page info and stage_detail (sub-model name)."""
     from app import storage, db
     pid, did = _make_doc(client, tmp_data_dir, "x.pdf")
     conn = db.get_connection(tmp_data_dir / "data.db")
