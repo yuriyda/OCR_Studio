@@ -119,8 +119,8 @@ def test_multiple_formulas_in_one_doc():
 
 
 def test_invalid_latex_kept_as_text():
-    """Garbled formula content must not crash the renderer."""
+    """Garbled formula content must not crash the renderer; source preserved."""
     from app.preview import markdown_to_html
     md = "$$\n\\frac{ no closing brace\n$$"
     html = markdown_to_html(md)
-    assert html
+    assert "no closing brace" in html
