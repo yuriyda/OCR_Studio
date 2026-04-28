@@ -108,6 +108,17 @@ def list_doc_dirs(data_dir: Path) -> list[str]:
     return [p.name for p in root.iterdir() if p.is_dir()]
 
 
+def delete_results(data_dir: Path, doc_id: str) -> None:
+    """Remove all result.* files for a document while preserving the original."""
+    d = doc_dir(data_dir, doc_id)
+    if not d.exists():
+        return
+    for ext in SUPPORTED_RESULT_FORMATS:
+        p = d / f"result.{ext}"
+        if p.exists():
+            p.unlink()
+
+
 def preview_dir(data_dir: Path, doc_id: str) -> Path:
     """Return the preview/ directory inside the document directory.
 

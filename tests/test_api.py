@@ -1136,3 +1136,63 @@ def test_reload_stream_emits_done_event(client):
             if "done" in first_chunk:
                 break
         assert "done" in first_chunk
+
+
+# ---------------------------------------------------------------------------
+# Task 9 (re-OCR): reset done document + bulk project re-OCR
+# ---------------------------------------------------------------------------
+
+def test_reocr_doc_resets_status_and_clears_results(client):
+    """Done doc -> POST /reocr -> status=queued, result files deleted."""
+    from app import files as files_mod
+    import app.main as m
+    upload = client.post(
+        "/api/ocr",
+        files={"files": ("a.pdf", b"%PDF-fake", "application/pdf")},
+        data={"format": "md", "lang": "ru"},
+    )
+    doc_id = upload.json()["ids"][0]
+    _force_done(doc_id, "# done")
+
+    md_path = files_mod.result_path_for_format(m.DATA_DIR, doc_id, "md")
+    assert md_path is not None and md_path.exists()
+
+    resp = client.post(f"/api/documents/{doc_id}/reocr")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "queued"
+
+    assert files_mod.result_path_for_format(m.DATA_DIR, doc_id, "md") is None
+
+
+def test_reocr_doc_400_when_not_done(client):
+    """Attempt to re-OCR a document that is not in 'done' state -> 400."""
+    upload = client.post(
+        "/api/ocr",
+        files={"files": ("b.pdf", b"%PDF-fake", "application/pdf")},
+        data={"format": "md", "lang": "ru"},
+    )
+    doc_id = upload.json()["ids"][0]
+    resp = client.post(f"/api/documents/{doc_id}/reocr")
+    assert resp.status_code == 400
+
+
+def test_reocr_project_bulk(client):
+    """All done docs in project -> bulk reocr -> all in queue."""
+    upload = client.post(
+        "/api/ocr",
+        files=[
+            ("files", ("a.pdf", b"%PDF", "application/pdf")),
+            ("files", ("b.pdf", b"%PDF", "application/pdf")),
+            ("files", ("c.pdf", b"%PDF", "application/pdf")),
+        ],
+        data={"format": "md", "lang": "ru"},
+    )
+    ids = upload.json()["ids"]
+    for did in ids:
+        _force_done(did, f"# {did}")
+
+    resp = client.post("/api/projects/1/reocr")  # Inbox
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["requeued"] == 3
+    assert set(body["doc_ids"]) == set(ids)

@@ -595,6 +595,62 @@ async def delete_document(doc_id: str):
         conn.close()
 
 
+# --- Re-OCR ---
+
+def _reset_doc_for_reocr(conn, doc_id: str) -> dict:
+    """Clear result files, reset DB fields to queued state."""
+    files.delete_results(DATA_DIR, doc_id)
+    DocumentRepo(conn).update(
+        doc_id,
+        status="queued",
+        error=None,
+        progress_percent=None,
+        current_page=None,
+        page_count=None,
+        finished_at=None,
+        started_at=None,
+        stage=None,
+        stage_detail=None,
+        stage_updated_at=None,
+    )
+    return DocumentRepo(conn).get(doc_id)
+
+
+@app.post("/api/documents/{doc_id}/reocr")
+async def reocr_document(doc_id: str):
+    conn = _conn()
+    try:
+        doc_repo = DocumentRepo(conn)
+        doc = doc_repo.get(doc_id)
+        if not doc:
+            raise HTTPException(404, "Document not found")
+        if doc["status"] != "done":
+            raise HTTPException(400, "Only completed documents can be re-OCR'd")
+        updated = _reset_doc_for_reocr(conn, doc_id)
+    finally:
+        conn.close()
+    await task_queue.put(doc_id)
+    return _doc_response(updated)
+
+
+@app.post("/api/projects/{project_id}/reocr")
+async def reocr_project(project_id: int):
+    conn = _conn()
+    try:
+        if ProjectRepo(conn).get(project_id) is None:
+            raise HTTPException(404, "Project not found")
+        doc_repo = DocumentRepo(conn)
+        done_docs = [d for d in doc_repo.list(project_id=project_id) if d["status"] == "done"]
+        ids = [d["id"] for d in done_docs]
+        for did in ids:
+            _reset_doc_for_reocr(conn, did)
+    finally:
+        conn.close()
+    for did in ids:
+        await task_queue.put(did)
+    return {"requeued": len(ids), "doc_ids": ids}
+
+
 # --- Settings + Onboarding ---
 
 from .settings import SettingsRepo as _SettingsRepo, HQ_KEYS as _HQ_KEYS
