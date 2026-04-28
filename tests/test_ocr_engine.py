@@ -219,6 +219,58 @@ def test_process_file_image_single_predict(monkeypatch, tmp_path):
     assert len(predict_calls) == 1
 
 
+def test_pipeline_models_includes_optional_with_flag():
+    from app.ocr_engine import PIPELINE_MODELS
+    optional = [m for m in PIPELINE_MODELS if m.get("optional")]
+    roles = {m["role"] for m in optional}
+    assert roles == {"orientation", "unwarping", "textline", "chart", "seal"}
+
+
+def test_pipeline_models_base_unchanged():
+    from app.ocr_engine import PIPELINE_MODELS
+    base = [m for m in PIPELINE_MODELS if not m.get("optional")]
+    roles = [m["role"] for m in base]
+    assert roles == ["layout", "text_det", "text_rec", "table", "formula"]
+
+
+def test_install_stage_hooks_wraps_optional_models():
+    """When pipeline has all optional sub-model attrs, all should be wrapped."""
+    from app import ocr_engine
+    fake_pipeline = MagicMock()
+    fake_pipeline._multi_device_inference = False
+    inner = MagicMock()
+    inner.layout_det_model = lambda *a, **k: None
+    inner.region_detection_model = lambda *a, **k: None
+    inner.formula_recognition_pipeline = lambda *a, **k: None
+    inner.general_ocr_pipeline = lambda *a, **k: None
+    inner.table_recognition_pipeline = lambda *a, **k: None
+    inner.chart_recognition_model = lambda *a, **k: None
+    inner.doc_orientation_classify_model = lambda *a, **k: None
+    inner.doc_unwarping_model = lambda *a, **k: None
+    inner.textline_orientation_model = lambda *a, **k: None
+    inner.seal_recognition_pipeline = lambda *a, **k: None
+    fake_pipeline._pipeline = inner
+
+    fake_engine = MagicMock()
+    fake_engine.paddlex_pipeline = fake_pipeline
+
+    seen = []
+    ocr_engine.install_stage_hooks(fake_engine, lambda name: seen.append(name))
+
+    expected_attrs = [
+        "layout_det_model", "region_detection_model", "formula_recognition_pipeline",
+        "general_ocr_pipeline", "table_recognition_pipeline", "chart_recognition_model",
+        "doc_orientation_classify_model", "doc_unwarping_model",
+        "textline_orientation_model", "seal_recognition_pipeline",
+    ]
+    for attr in expected_attrs:
+        wrapped = getattr(inner, attr)
+        assert isinstance(wrapped, ocr_engine._Hooked), f"{attr} not wrapped"
+
+    inner.doc_orientation_classify_model()
+    assert "orientation" in seen
+
+
 def test_process_file_iterates_generator_lazily(monkeypatch, tmp_path):
     """process_file must iterate engine.predict() as a lazy generator,
     not materialise it via list() — otherwise progress_callback is fake.

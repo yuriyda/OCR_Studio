@@ -28,11 +28,18 @@ _engine: PPStructureV3 | None = None
 # stage_label ("Loading models: ..."). Names correspond to directories in
 # /home/node/.paddlex/official_models/. Update only on PaddleOCR upgrades.
 PIPELINE_MODELS: list[dict] = [
+    # Base set — always loaded
     {"role": "layout",   "name": "PicoDet-S_layout_3cls"},
     {"role": "text_det", "name": "PP-OCRv5_server_det"},
     {"role": "text_rec", "name": "cyrillic_PP-OCRv3"},
     {"role": "table",    "name": "SLANet_plus + RT-DETR-L_wired_table_cell_det"},
     {"role": "formula",  "name": "PP-FormulaNet_plus-L"},
+    # Optional set — gated by HQ-mode flags in app/settings.py
+    {"role": "orientation", "name": "PP-LCNet_x1_0_doc_ori",      "optional": True},
+    {"role": "unwarping",   "name": "UVDoc",                       "optional": True},
+    {"role": "textline",    "name": "PP-LCNet_x1_0_textline_ori",  "optional": True},
+    {"role": "chart",       "name": "PP-Chart2Table",              "optional": True},
+    {"role": "seal",        "name": "PP-OCRv4_seal_det",           "optional": True},
 ]
 
 
@@ -99,6 +106,10 @@ def install_stage_hooks(engine, on_stage_start) -> None:
         ("general_ocr_pipeline", "text"),
         ("table_recognition_pipeline", "table"),
         ("chart_recognition_model", "chart"),
+        ("doc_orientation_classify_model", "orientation"),
+        ("doc_unwarping_model", "unwarping"),
+        ("textline_orientation_model", "textline"),
+        ("seal_recognition_pipeline", "seal"),
     ]
     for actual in actual_pipelines:
         for attr_name, stage_name in targets:
