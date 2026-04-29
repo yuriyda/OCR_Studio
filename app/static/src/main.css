@@ -84,7 +84,7 @@
     @apply bg-accent/15 ring-2 ring-accent;
   }
   .modal-overlay {
-    @apply fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50;
+    @apply fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50;
     animation: fade-in 0.15s;
   }
   .modal-content {
