@@ -156,6 +156,19 @@ function showSourceLoading(initialLabel: string): void {
   </div>`;
 }
 
+async function selectFirstDocOrClear(): Promise<void> {
+  if (docsCache.length > 0) {
+    const firstId = docsCache[0]!.id;
+    await selectDocument(firstId);
+  } else {
+    selectedDocId = null;
+    selectedPageIdx = 0;
+    rerenderSource();
+    renderResultTabs();
+    await rerenderResult();
+  }
+}
+
 async function selectDocument(docId: string): Promise<void> {
   if (selectedDocId !== docId) selectedPageIdx = 0;
   selectedDocId = docId;
@@ -291,14 +304,17 @@ async function uploadFiles(filesList: File[], pid: number): Promise<void> {
 }
 
 function bindUI(): void {
-  $('proj-list').addEventListener('click', (e) => {
+  $('proj-list').addEventListener('click', async (e) => {
     const target = e.target as HTMLElement;
     const item = target.closest<HTMLElement>('.project-item');
     if (!item) return;
     const projId = Number(item.dataset.id);
     if (target.classList.contains('proj-menu')) { handleProjectMenu(projId); return; }
+    if (projId === state.activeProjectId) return;
     state.setActiveProject(projId);
-    refreshProjects(); refreshDocuments();
+    await refreshProjects();
+    await refreshDocuments();
+    await selectFirstDocOrClear();
     polling.setProject(state.activeProjectId);
   });
 
@@ -327,8 +343,14 @@ function bindUI(): void {
   $('proj-add-btn').addEventListener('click', async () => {
     const name = await modal.prompt(t('modal.project.create'));
     if (!name) return;
-    try { await api.createProject(name); await refreshProjects(); }
-    catch (e) { toast.show((e as Error).message, 'error'); }
+    try {
+      const created = await api.createProject(name);
+      state.setActiveProject(created.id);
+      await refreshProjects();
+      await refreshDocuments();
+      await selectFirstDocOrClear();
+      polling.setProject(state.activeProjectId);
+    } catch (e) { toast.show((e as Error).message, 'error'); }
   });
 
   $('doc-list').addEventListener('click', (e) => {
@@ -502,6 +524,7 @@ function handleDocMenu(docId: string): void {
           renderResultTabs();
           await rerenderResult();
         }
+        await refreshProjects();
         await refreshDocuments();
       } catch (e) {
         if (e instanceof ApiError && e.status === 409) toast.show(t('toast.processing_required'), 'error');

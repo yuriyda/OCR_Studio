@@ -30,7 +30,7 @@ export function hideMenu(): void {
 export function showMenu(anchor: HTMLElement, items: MenuItem[]): void {
   hideMenu();
   const menu = document.createElement('div');
-  menu.className = 'context-menu glass-panel rounded-md shadow-glass absolute z-50';
+  menu.className = 'context-menu bg-bg border border-border rounded-md shadow-glass absolute z-50';
   menu.setAttribute('role', 'menu');
 
   for (const item of items) {
