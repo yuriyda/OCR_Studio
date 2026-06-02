@@ -21,7 +21,7 @@ from fastapi import Body, FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import db, files, ocr_engine, converters
+from . import db, files, ocr_engine, converters, watcher
 from . import system as sys_info
 from .storage import ProjectRepo, DocumentRepo, ProjectError, INBOX_ID
 
@@ -85,6 +85,12 @@ async def lifespan(app: FastAPI):
         conn.close()
     _spawn_bg(worker())
     _spawn_bg(orphan_cleanup_loop())
+    _spawn_bg(watcher.watcher_loop(
+        data_dir=DATA_DIR,
+        db_path=DB_PATH,
+        task_queue=task_queue,
+        reload_state=_reload_state,
+    ))
     asyncio.get_running_loop().run_in_executor(
         None, lambda: ocr_engine.get_engine(DB_PATH)
     )
@@ -175,11 +181,19 @@ async def worker():
                     stage_updated_at=_now_iso(),
                 )
                 logger.info("Doc %s done: %s", doc_id, doc["filename"])
+                try:
+                    watcher.post_process_done(DATA_DIR, doc)
+                except Exception:
+                    logger.exception("watcher post_process_done failed for %s", doc_id)
             except Exception as e:
                 logger.exception("Doc %s failed", doc_id)
                 doc_repo.update(doc_id, status="error", error=str(e),
                                 finished_at=_now_iso(),
                                 stage=None, stage_detail=None, stage_updated_at=_now_iso())
+                try:
+                    watcher.post_process_error(DATA_DIR, doc, error_message=str(e))
+                except Exception:
+                    logger.exception("watcher post_process_error failed for %s", doc_id)
         finally:
             conn.close()
             task_queue.task_done()

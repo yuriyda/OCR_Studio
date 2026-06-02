@@ -29,9 +29,13 @@ def client(tmp_data_dir, monkeypatch):
     async def _noop_worker():
         await asyncio.sleep(3600)  # does not process the queue in tests
 
+    async def _noop_watcher(*args, **kwargs):
+        await asyncio.sleep(3600)  # does not scan inbox in tests
+
     with patch("app.ocr_engine.process_file", return_value="# stub"), \
          patch("app.ocr_engine.get_engine"), \
-         patch("app.main.worker", _noop_worker):
+         patch("app.main.worker", _noop_worker), \
+         patch("app.watcher.watcher_loop", _noop_watcher):
         from app import main
         main.DATA_DIR = tmp_data_dir
         main.DB_PATH = tmp_data_dir / "data.db"
@@ -1196,3 +1200,26 @@ def test_reocr_project_bulk(client):
     body = resp.json()
     assert body["requeued"] == 3
     assert set(body["doc_ids"]) == set(ids)
+
+
+# ---------------------------------------------------------------------------
+# Task 10: Watch project auto-created, rename/delete restrictions
+# ---------------------------------------------------------------------------
+
+def test_watch_project_auto_created(client):
+    """Lifespan creates the Watch project (id=2) next to Inbox."""
+    resp = client.get("/api/projects")
+    assert resp.status_code == 200
+    by_id = {p["id"]: p for p in resp.json()}
+    assert 1 in by_id and by_id[1]["name"] == "Inbox"
+    assert 2 in by_id and by_id[2]["name"] == "Watch"
+
+
+def test_watch_project_cannot_be_renamed_via_api(client):
+    resp = client.patch("/api/projects/2", json={"name": "MyWatch"})
+    assert resp.status_code == 400
+
+
+def test_watch_project_cannot_be_deleted_via_api(client):
+    resp = client.delete("/api/projects/2")
+    assert resp.status_code == 400

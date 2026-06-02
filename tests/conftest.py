@@ -31,9 +31,13 @@ stub_paddleocr_modules()
 
 @pytest.fixture
 def tmp_data_dir(monkeypatch):
-    """Isolated data/ directory for each test."""
+    """Isolated data/ directory for each test, with an isolated WATCH_ROOT."""
     tmp = Path(tempfile.mkdtemp(prefix="ocr_test_"))
     (tmp / "docs").mkdir()
+    watch_root = tmp / "watch"
+    (watch_root / "inbox").mkdir(parents=True)
+    (watch_root / "out").mkdir()
     monkeypatch.setenv("OCR_DATA_DIR", str(tmp))
+    monkeypatch.setenv("WATCH_ROOT", str(watch_root))
     yield tmp
     shutil.rmtree(tmp, ignore_errors=True)
