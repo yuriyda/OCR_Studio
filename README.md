@@ -190,6 +190,10 @@ Two optional environment variables tune the watcher (defaults in `docker-compose
 
 Re-OCR of a watch-folder document (via the UI gear menu) still works: the original is preserved inside `data/docs/<doc_id>/`, independent of `/watch/`. The new result is written next to the previous one as `<name>_1.md` (collision suffix); the source remains in `processed/` and is not moved again.
 
+#### Live queue progress in the footer
+
+While documents are being processed (whether from `watch/inbox/` or manual uploads), the status bar at the bottom of the UI shows live progress: a progress bar, `M / N` counter, current queue size, elapsed time, and an ETA. The footer adds a second row only when the queue is active; in idle mode it shows just `last batch: <count> · <duration>` appended to the existing engine/env line. Progress is recalculated whenever the frontend polls (every 2s while a batch is running, every 10s when idle) — no recalculation happens if the tab is in the background and polling is paused by the browser.
+
 ### Run
 
 ```bash
