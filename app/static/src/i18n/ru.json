@@ -87,5 +87,9 @@
   "reocr.doc_button_title": "Re-OCR этот документ",
   "reocr.project_button": "Re-process project",
   "reocr.confirm_doc": "Документ будет поставлен в очередь заново. Существующий результат удалится. Продолжить?",
-  "reocr.confirm_project": "{n} документов будут поставлены в очередь заново. Существующие результаты удалятся. Продолжить?"
+  "reocr.confirm_project": "{n} документов будут поставлены в очередь заново. Существующие результаты удалятся. Продолжить?",
+  "statusbar.queue.queue_size": "активных: {count}",
+  "statusbar.queue.elapsed": "прошло {duration}",
+  "statusbar.queue.eta": "~ETA {duration}",
+  "statusbar.queue.last_batch": "последний батч: {count} · {duration}"
 }

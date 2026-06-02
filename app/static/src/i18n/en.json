@@ -87,5 +87,9 @@
   "reocr.doc_button_title": "Re-OCR this document",
   "reocr.project_button": "Re-process project",
   "reocr.confirm_doc": "The document will be re-queued. Existing result will be removed. Continue?",
-  "reocr.confirm_project": "{n} documents will be re-queued. Existing results will be removed. Continue?"
+  "reocr.confirm_project": "{n} documents will be re-queued. Existing results will be removed. Continue?",
+  "statusbar.queue.queue_size": "active: {count}",
+  "statusbar.queue.elapsed": "elapsed {duration}",
+  "statusbar.queue.eta": "~ETA {duration}",
+  "statusbar.queue.last_batch": "last batch: {count} · {duration}"
 }

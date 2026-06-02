@@ -88,10 +88,13 @@ function refreshStatusBar(): void {
   const proj = projectsCache.find(p => p.id === state.activeProjectId);
   const processing = docsCache.filter(d => d.status === 'processing').length;
   const queued = docsCache.filter(d => d.status === 'queued').length;
+  // NOTE: queue field will be wired to live BatchState in T5 (pollSystemState).
+  // For now pass a safe idle placeholder so the status bar renders without errors.
   renderStatusBar($('statusbar'), {
     env: { gpu: envCache.gpu, cuda: envCache.cuda, vram_gb: envCache.vram_gb },
     engine: { name: 'PPStructureV3', lang: envCache.engine_lang, status: envCache.engine_status, pipeline: envCache.engine_pipeline },
     project: proj ? { name: proj.name, doc_count: proj.doc_count, total_bytes: proj.total_bytes, processing, queued } : null,
+    queue: { active: false, completedInBatch: 0, totalInBatch: 0, activeNow: 0, elapsedMs: 0, etaMs: null, lastSummary: null },
   });
 }
 
