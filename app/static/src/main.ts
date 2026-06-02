@@ -13,7 +13,7 @@ import './main.css';
 import { api, ApiError, getSettings, reocrDoc, reocrProject } from './api';
 import { state } from './state';
 import { loadLang, applyI18nToDom, t } from './i18n';
-import { renderProjects, INBOX_ID } from './projects';
+import { renderProjects, INBOX_ID, isProtectedProject } from './projects';
 import { renderDocuments, applySort } from './documents';
 import { renderSourcePane } from './source';
 import { renderResult, allResultTabs, TAB_TO_FORMAT, isTabAvailable, type ResultTabKey } from './preview';
@@ -457,6 +457,9 @@ function bindUI(): void {
 function handleProjectMenu(id: number): void {
   const proj = projectsCache.find(p => p.id === id);
   if (!proj) return;
+  // Defense-in-depth: protected projects (Inbox, Watch) have no .proj-menu rendered,
+  // but guard here too in case someone crafts a DOM event manually.
+  if (isProtectedProject(proj)) return;
   const anchor = document.querySelector<HTMLElement>(`.project-item[data-id="${id}"] .proj-menu`);
   if (!anchor) return;
   showMenu(anchor, [
