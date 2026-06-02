@@ -42,6 +42,7 @@ let selectedPageIdx = 0;
 let envCache: SystemInfo = {
   gpu: null, cuda: null, vram_gb: null, engine_lang: null, engine_status: 'idle', engine_pipeline: [],
   recommendation: { hq_mode: 'off', reason: '', warning: null },
+  queue: { queued: 0, processing: 0, completed_since_start: 0 },
 };
 let limitsCache: ApiLimits = { max_file_size_bytes: 50 * 1024 * 1024, allowed_extensions: [] };
 const previewPagesCache = new Map<string, string[]>();

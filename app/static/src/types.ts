@@ -64,6 +64,12 @@ export interface HqRecommendation {
   warning: string | null;
 }
 
+export interface QueueCounts {
+  queued: number;
+  processing: number;
+  completed_since_start: number;
+}
+
 export interface SystemInfo {
   gpu: string | null;
   cuda: string | null;
@@ -73,6 +79,7 @@ export interface SystemInfo {
   engine_status: 'ready' | 'loading' | 'idle';
   engine_pipeline: PipelineModel[];
   recommendation: HqRecommendation;
+  queue: QueueCounts;
 }
 
 export interface ApiLimits {

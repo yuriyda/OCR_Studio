@@ -15,6 +15,7 @@
 
 import type { LangCode } from './types';
 import type { SettingsResponse } from './api';
+import { type BatchState, initialBatchState } from './batch_tracker';
 
 export interface SortMode {
   sort: 'created' | 'name' | 'size';
@@ -58,6 +59,7 @@ export interface Recommendation {
 let _settings: SettingsResponse | null = null;
 let _reload: ReloadProgress | null = null;
 let _recommendation: Recommendation | null = null;
+let _batch: BatchState = initialBatchState();
 
 function persist(): void {
   try {
@@ -98,6 +100,7 @@ export const state = {
     _settings = null;
     _reload = null;
     _recommendation = null;
+    _batch = initialBatchState();
   },
 
   // Settings slice
@@ -113,6 +116,10 @@ export const state = {
   // Recommendation slice
   getRecommendation(): Recommendation | null { return _recommendation; },
   setRecommendation(r: Recommendation): void { _recommendation = r; },
+
+  // Batch slice — driven by pollSystemState in main.ts (see batch_tracker.ts).
+  getBatch(): BatchState { return _batch; },
+  setBatch(next: BatchState): void { _batch = next; },
 };
 
 // ---------------------------------------------------------------------------
@@ -128,6 +135,8 @@ export function setRecommendation(r: Recommendation): void { state.setRecommenda
 export function getReloadProgress(): ReloadProgress | null { return state.getReloadProgress(); }
 export function setReloadProgress(p: ReloadProgress): void { state.setReloadProgress(p); }
 export function clearReloadProgress(): void { state.clearReloadProgress(); }
+export function getBatch(): BatchState { return state.getBatch(); }
+export function setBatch(next: BatchState): void { state.setBatch(next); }
 
 // ---------------------------------------------------------------------------
 // Pure helpers — placed here because SettingsResponse is already imported,
