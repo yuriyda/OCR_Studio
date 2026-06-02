@@ -226,4 +226,43 @@ describe('renderStatusBar', () => {
     const queueRow = sb.querySelector('[data-queue-row]') as HTMLElement;
     expect(queueRow.textContent).not.toContain('.pdf');
   });
+
+  it('truncates long filename with mid-ellipsis', () => {
+    const sb = document.getElementById('sb')!;
+    const longName = 'Очень-длинное-имя-сканированного-документа-2026-06-02.pdf';
+    renderStatusBar(sb, {
+      env: { gpu: 'X', cuda: '1', vram_gb: 8 },
+      engine: { name: 'X', lang: 'ru', status: 'ready', pipeline: [] },
+      project: null,
+      queue: {
+        active: true, completedInBatch: 1, totalInBatch: 3, activeNow: 2,
+        elapsedMs: 5000, etaMs: 10000, lastSummary: null,
+        current: { filename: longName, size_bytes: 1000 },
+      },
+    });
+    const queueRow = sb.querySelector('[data-queue-row]') as HTMLElement;
+    // Original name length is > 40; rendered name should NOT contain the full string.
+    expect(queueRow.textContent).not.toContain(longName);
+    // Mid-ellipsis preserves prefix and extension.
+    expect(queueRow.textContent).toContain('Очень');
+    expect(queueRow.textContent).toContain('.pdf');
+    expect(queueRow.textContent).toContain('…');
+  });
+
+  it('does not truncate short filenames', () => {
+    const sb = document.getElementById('sb')!;
+    renderStatusBar(sb, {
+      env: { gpu: 'X', cuda: '1', vram_gb: 8 },
+      engine: { name: 'X', lang: 'ru', status: 'ready', pipeline: [] },
+      project: null,
+      queue: {
+        active: true, completedInBatch: 1, totalInBatch: 3, activeNow: 2,
+        elapsedMs: 5000, etaMs: 10000, lastSummary: null,
+        current: { filename: 'short.pdf', size_bytes: 1000 },
+      },
+    });
+    const queueRow = sb.querySelector('[data-queue-row]') as HTMLElement;
+    expect(queueRow.textContent).toContain('short.pdf');
+    expect(queueRow.textContent).not.toContain('…');
+  });
 });

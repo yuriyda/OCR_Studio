@@ -16,7 +16,7 @@
 
 import { t } from './i18n';
 import { formatBytes } from './icons';
-import type { LangCode, PipelineModel } from './types';
+import type { LangCode, PipelineModel, QueueCurrent } from './types';
 
 export interface StatusBarQueue {
   /** True when at least one document is being actively processed. */
@@ -34,7 +34,7 @@ export interface StatusBarQueue {
   /** Summary of the last completed batch, shown in idle state as a tail label. */
   lastSummary: { total: number; elapsedMs: number } | null;
   /** Currently processing document, or null if idle or unknown. */
-  current: { filename: string; size_bytes: number } | null;
+  current: QueueCurrent | null;
 }
 
 export interface StatusBarData {
@@ -53,6 +53,20 @@ function escHtml(s: string): string {
   const d = document.createElement('div');
   d.textContent = s;
   return d.innerHTML;
+}
+
+/**
+ * Truncate a filename to `maxLen` characters using mid-ellipsis (kept-start + … + kept-end).
+ * Preserves both prefix and extension/timestamp suffix so the user can still recognize the file.
+ * Returns the input unchanged if it's already at or below the limit.
+ */
+export function truncateMid(s: string, maxLen: number): string {
+  if (s.length <= maxLen) return s;
+  // Reserve 1 char for '…'; split remainder roughly in half, biased to keep more of the prefix.
+  const budget = maxLen - 1;
+  const headLen = Math.ceil(budget / 2);
+  const tailLen = budget - headLen;
+  return `${s.slice(0, headLen)}…${s.slice(-tailLen)}`;
 }
 
 /**
@@ -86,7 +100,8 @@ function renderQueueRow(q: StatusBarQueue): string {
     parts.push(t('statusbar.queue.eta', { duration: formatDuration(q.etaMs) }));
   }
   if (q.current !== null) {
-    parts.push(`${q.current.filename} (${formatBytes(q.current.size_bytes)})`);
+    const fn = truncateMid(q.current.filename, 40);
+    parts.push(`${fn} (${formatBytes(q.current.size_bytes)})`);
   }
   const text = parts.join(' · ');
   return `
