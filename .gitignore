@@ -5,6 +5,9 @@ data/
 *.db-wal
 *.db-shm
 
+# Watch-folder pipeline — host-side drop folder (mounted into /watch in container)
+watch/
+
 # Python
 __pycache__/
 *.pyc
