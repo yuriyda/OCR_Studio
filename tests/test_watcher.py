@@ -74,3 +74,40 @@ def test_scan_inbox_ignores_symlinks(watch_root, tmp_path):
 def test_scan_inbox_missing_directory_returns_empty(tmp_path):
     result = list(watcher.scan_inbox(tmp_path / "does_not_exist"))
     assert result == []
+
+
+def test_is_stable_first_seen_returns_false(watch_root):
+    p = watch_root / "inbox" / "foo.pdf"
+    p.write_bytes(b"%PDF-1.4 abc")
+    assert watcher.is_stable(p, stable_secs=0) is False  # first observation
+
+
+def test_is_stable_after_two_matching_observations_with_old_mtime(watch_root):
+    p = watch_root / "inbox" / "foo.pdf"
+    p.write_bytes(b"%PDF-1.4 abc")
+    # Backdate mtime so it is older than stable_secs.
+    past = time.time() - 10
+    os.utime(p, (past, past))
+    watcher.is_stable(p, stable_secs=3)   # observation 1: records (mtime, size)
+    assert watcher.is_stable(p, stable_secs=3) is True  # same (mtime, size) + old enough
+
+
+def test_is_stable_resets_when_size_changes(watch_root):
+    p = watch_root / "inbox" / "foo.pdf"
+    p.write_bytes(b"%PDF-1.4 a")
+    past = time.time() - 10
+    os.utime(p, (past, past))
+    watcher.is_stable(p, stable_secs=3)
+    # Append more bytes -> size changes -> not stable, cache resets.
+    with open(p, "ab") as f:
+        f.write(b"more")
+    os.utime(p, (past, past))  # same mtime, different size
+    assert watcher.is_stable(p, stable_secs=3) is False
+
+
+def test_is_stable_returns_false_if_mtime_too_recent(watch_root):
+    p = watch_root / "inbox" / "foo.pdf"
+    p.write_bytes(b"%PDF-1.4 a")
+    # mtime is "now" — should not be considered stable even after two observations.
+    watcher.is_stable(p, stable_secs=10)
+    assert watcher.is_stable(p, stable_secs=10) is False

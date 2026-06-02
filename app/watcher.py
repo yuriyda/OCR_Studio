@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time as _time
 from pathlib import Path
 from typing import Iterator
 
@@ -89,10 +90,33 @@ def scan_inbox(inbox: Path) -> Iterator[tuple[Path, str]]:
         yield entry, rel.as_posix()
 
 
-# Stability cache helpers (filled in next task).
+# Stability cache helpers.
+# Key: Path; Value: (mtime, size, first_seen_wall_clock).
 _stability_cache: dict[Path, tuple[float, int, float]] = {}
 
 
 def _reset_stability_cache() -> None:
     """Test helper — clear the in-process stability cache."""
     _stability_cache.clear()
+
+
+def is_stable(path: Path, stable_secs: int) -> bool:
+    """Return True iff `path` has been observed at least twice with the same
+    (mtime, size) AND its mtime is at least `stable_secs` seconds in the past.
+
+    The double-observation requirement protects against a file that grows
+    monotonically (e.g. a long upload over a slow link). The mtime-age check
+    protects against a file that finished writing at the exact moment of the
+    first observation but might still be inside a buffered-write window.
+    """
+    try:
+        st = path.stat()
+    except OSError:
+        _stability_cache.pop(path, None)
+        return False
+    now = _time.time()
+    prev = _stability_cache.get(path)
+    if prev is None or prev[0] != st.st_mtime or prev[1] != st.st_size:
+        _stability_cache[path] = (st.st_mtime, st.st_size, now)
+        return False
+    return (now - st.st_mtime) >= stable_secs
