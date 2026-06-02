@@ -14,6 +14,10 @@ from typing import Optional
 
 INBOX_ID = 1
 INBOX_NAME = "Inbox"
+
+WATCH_PROJECT_ID = 2
+WATCH_PROJECT_NAME = "Watch"
+
 MAX_NAME_LEN = 100
 
 
@@ -37,6 +41,23 @@ class ProjectRepo:
             self.conn.execute(
                 "INSERT INTO projects (id, name, created_at) VALUES (?, ?, ?)",
                 (INBOX_ID, INBOX_NAME, _now_iso()),
+            )
+            self.conn.commit()
+
+    def ensure_watch_project(self) -> None:
+        """Create the dedicated 'Watch' project if missing.
+
+        Mirrors `ensure_inbox()`. The id is fixed (WATCH_PROJECT_ID = 2) so
+        the watcher loop and the worker post-hook can reference it as a constant.
+        Renaming and deletion are blocked by guards in `rename()` and `delete()`.
+        """
+        row = self.conn.execute(
+            "SELECT id FROM projects WHERE id = ?", (WATCH_PROJECT_ID,)
+        ).fetchone()
+        if row is None:
+            self.conn.execute(
+                "INSERT INTO projects (id, name, created_at) VALUES (?, ?, ?)",
+                (WATCH_PROJECT_ID, WATCH_PROJECT_NAME, _now_iso()),
             )
             self.conn.commit()
 
@@ -71,6 +92,8 @@ class ProjectRepo:
     def rename(self, project_id: int, new_name: str) -> None:
         if project_id == INBOX_ID:
             raise ProjectError("Inbox cannot be renamed")
+        if project_id == WATCH_PROJECT_ID:
+            raise ProjectError("Watch project cannot be renamed")
         new_name = (new_name or "").strip()
         if not new_name:
             raise ProjectError("name is empty")
@@ -87,6 +110,8 @@ class ProjectRepo:
     def delete(self, project_id: int) -> None:
         if project_id == INBOX_ID:
             raise ProjectError("Inbox cannot be deleted")
+        if project_id == WATCH_PROJECT_ID:
+            raise ProjectError("Watch project cannot be deleted")
         self.conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
         self.conn.commit()
 

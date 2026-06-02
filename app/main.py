@@ -74,7 +74,9 @@ async def lifespan(app: FastAPI):
     db.init(DB_PATH)
     conn = _conn()
     try:
-        ProjectRepo(conn).ensure_inbox()
+        pr = ProjectRepo(conn)
+        pr.ensure_inbox()
+        pr.ensure_watch_project()
         doc_repo = DocumentRepo(conn)
         doc_repo.recover_processing()
         for did in doc_repo.queued_ids_in_order():

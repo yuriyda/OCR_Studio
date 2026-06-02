@@ -2,7 +2,10 @@
 import pytest
 
 from app import db
-from app.storage import ProjectRepo, ProjectError
+from app.storage import (
+    ProjectRepo, ProjectError, INBOX_ID, INBOX_NAME,
+    WATCH_PROJECT_ID, WATCH_PROJECT_NAME,
+)
 
 
 @pytest.fixture
@@ -10,7 +13,11 @@ def repo(tmp_data_dir):
     db_path = tmp_data_dir / "data.db"
     db.init(db_path)
     conn = db.get_connection(db_path)
-    return ProjectRepo(conn)
+    r = ProjectRepo(conn)
+    # Pre-create both system projects so that user-created projects get id >= 3.
+    r.ensure_inbox()
+    r.ensure_watch_project()
+    return r
 
 
 def test_create_inbox_on_first_use(repo):
@@ -21,10 +28,12 @@ def test_create_inbox_on_first_use(repo):
 
 
 def test_ensure_inbox_idempotent(repo):
+    # fixture already called ensure_inbox(); calling it again must not duplicate.
     repo.ensure_inbox()
-    repo.ensure_inbox()
-    projects = repo.list()
-    assert len(projects) == 1
+    inbox_rows = repo.conn.execute(
+        "SELECT id FROM projects WHERE id = 1"
+    ).fetchall()
+    assert len(inbox_rows) == 1
 
 
 def test_create_project(repo):
@@ -78,11 +87,11 @@ def test_delete_inbox_forbidden(repo):
 
 
 def test_list_returns_all(repo):
-    repo.ensure_inbox()
+    # fixture pre-creates Inbox and Watch; user projects are appended after them.
     repo.create("A")
     repo.create("B")
     names = [p["name"] for p in repo.list()]
-    assert names == ["Inbox", "A", "B"]
+    assert names == ["Inbox", "Watch", "A", "B"]
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +108,7 @@ def doc_repo(tmp_data_dir):
     conn = db.get_connection(db_path)
     pr = ProjectRepo(conn)
     pr.ensure_inbox()
+    pr.ensure_watch_project()
     return DocumentRepo(conn)
 
 
@@ -204,3 +214,68 @@ def test_iso_dates_roundtrip(doc_repo):
     d = doc_repo.get("a1")
     parsed = datetime.fromisoformat(d["created_at"])
     assert parsed.tzinfo is not None
+
+
+# ---------------------------------------------------------------------------
+# Watch project tests
+# ---------------------------------------------------------------------------
+
+def test_ensure_watch_project_creates_with_fixed_id(tmp_path):
+    db_path = tmp_path / "data.db"
+    db.init(db_path)
+    conn = db.get_connection(db_path)
+    try:
+        repo = ProjectRepo(conn)
+        repo.ensure_inbox()
+        repo.ensure_watch_project()
+        watch = repo.get(WATCH_PROJECT_ID)
+        assert watch is not None
+        assert watch["id"] == WATCH_PROJECT_ID
+        assert watch["name"] == WATCH_PROJECT_NAME
+    finally:
+        conn.close()
+
+
+def test_ensure_watch_project_is_idempotent(tmp_path):
+    db_path = tmp_path / "data.db"
+    db.init(db_path)
+    conn = db.get_connection(db_path)
+    try:
+        repo = ProjectRepo(conn)
+        repo.ensure_inbox()
+        repo.ensure_watch_project()
+        repo.ensure_watch_project()
+        rows = conn.execute(
+            "SELECT id FROM projects WHERE id = ?", (WATCH_PROJECT_ID,)
+        ).fetchall()
+        assert len(rows) == 1
+    finally:
+        conn.close()
+
+
+def test_watch_project_cannot_be_renamed(tmp_path):
+    db_path = tmp_path / "data.db"
+    db.init(db_path)
+    conn = db.get_connection(db_path)
+    try:
+        repo = ProjectRepo(conn)
+        repo.ensure_inbox()
+        repo.ensure_watch_project()
+        with pytest.raises(ProjectError, match="Watch"):
+            repo.rename(WATCH_PROJECT_ID, "Something else")
+    finally:
+        conn.close()
+
+
+def test_watch_project_cannot_be_deleted(tmp_path):
+    db_path = tmp_path / "data.db"
+    db.init(db_path)
+    conn = db.get_connection(db_path)
+    try:
+        repo = ProjectRepo(conn)
+        repo.ensure_inbox()
+        repo.ensure_watch_project()
+        with pytest.raises(ProjectError, match="Watch"):
+            repo.delete(WATCH_PROJECT_ID)
+    finally:
+        conn.close()
