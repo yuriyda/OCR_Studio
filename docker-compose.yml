@@ -6,6 +6,7 @@ services:
     volumes:
       - paddle-models:/root/.paddlex
       - ./data:/app/data
+      - ./watch:/watch
     environment:
       - OCR_DATA_DIR=/app/data
     deploy:

@@ -169,6 +169,20 @@ PaddlePaddle ships a CPU build, but PPStructureV3 inference on CPU is **10-30× 
 
 `docker-compose.yml` mounts `./data/` as a bind-volume. SQLite DB (`data/data.db`), uploaded originals, OCR results and preview cache (`data/docs/<doc_id>/`) survive `docker compose down` / image rebuilds.
 
+### Watch-folder (unattended batch processing)
+
+Drop files into `./watch/inbox/` (subdirectories are supported; the source tree is mirrored in the output).
+The container picks them up automatically and writes Markdown results to `./watch/out/` preserving the
+relative path (e.g. `inbox/scans/2024/report.pdf` → `out/scans/2024/report.md`).
+After processing, source files are moved to `./watch/inbox/processed/` on success or to
+`./watch/inbox/errors/` with a `<file>.error.txt` sidecar on failure.
+All watch-folder documents appear in a dedicated **Watch** project in the UI; OCR language is fixed to Russian.
+Create the `watch/` directory on the host before the first `docker compose up` so the bind mount succeeds:
+
+```bash
+mkdir -p watch/inbox watch/out
+```
+
 ### Run
 
 ```bash
