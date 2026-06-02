@@ -378,3 +378,73 @@ def test_post_process_done_skips_non_watch_documents(watch_root, data_dir):
     doc = {"id": "x", "filename": "y.pdf", "source": None, "source_relpath": None}
     watcher.post_process_done(data_dir, doc)
     assert list((watch_root / "out").rglob("*")) == []
+
+
+# T8 carry-forward: processed/ name collision (parallel to out/ collision test above).
+def test_post_process_done_handles_processed_name_collision(watch_root, data_dir):
+    """T8 carry-forward: when inbox/processed/foo.pdf exists, second move uses _1 suffix."""
+    rel = "foo.pdf"
+    # Pre-existing processed/foo.pdf (from a prior run, perhaps).
+    (watch_root / "inbox" / "processed").mkdir(parents=True)
+    (watch_root / "inbox" / "processed" / "foo.pdf").write_bytes(b"old")
+    # New source to be moved.
+    src = watch_root / "inbox" / "foo.pdf"
+    src.write_bytes(b"new")
+    doc = _make_done_doc(data_dir, rel, md_content="# result")
+    watcher.post_process_done(data_dir, doc)
+    # Original processed/foo.pdf untouched, new file landed at foo_1.pdf
+    assert (watch_root / "inbox" / "processed" / "foo.pdf").read_bytes() == b"old"
+    assert (watch_root / "inbox" / "processed" / "foo_1.pdf").read_bytes() == b"new"
+    assert not src.exists()
+
+
+# ---------------------------------------------------------------------------
+# post_process_error tests (T9)
+# ---------------------------------------------------------------------------
+
+def test_post_process_error_moves_source_and_writes_sidecar(watch_root, data_dir):
+    rel = "a/b/bad.pdf"
+    src = watch_root / "inbox" / rel
+    src.parent.mkdir(parents=True)
+    src.write_bytes(b"%PDF-broken")
+
+    doc = {
+        "id": "errdoc1",
+        "filename": "bad.pdf",
+        "source": "watch",
+        "source_relpath": rel,
+    }
+    watcher.post_process_error(data_dir, doc, error_message="boom: invalid PDF")
+
+    dst = watch_root / "inbox" / "errors" / rel
+    assert dst.exists()
+    assert not src.exists()
+
+    sidecar = watch_root / "inbox" / "errors" / f"{rel}.error.txt"
+    text = sidecar.read_text(encoding="utf-8")
+    assert "boom: invalid PDF" in text
+    assert doc["id"] in text
+
+
+def test_post_process_error_writes_sidecar_even_if_source_gone(
+    watch_root, data_dir
+):
+    rel = "no_file.pdf"
+    doc = {
+        "id": "errdoc2",
+        "filename": "no_file.pdf",
+        "source": "watch",
+        "source_relpath": rel,
+    }
+    watcher.post_process_error(data_dir, doc, error_message="vanished mid-flight")
+    sidecar = watch_root / "inbox" / "errors" / f"{rel}.error.txt"
+    assert sidecar.exists()
+    assert "vanished mid-flight" in sidecar.read_text(encoding="utf-8")
+
+
+def test_post_process_error_skips_non_watch_documents(watch_root, data_dir):
+    doc = {"id": "x", "filename": "y.pdf", "source": None, "source_relpath": None}
+    watcher.post_process_error(data_dir, doc, error_message="should not write")
+    errors_dir = watch_root / "inbox" / "errors"
+    if errors_dir.exists():
+        assert list(errors_dir.rglob("*")) == []

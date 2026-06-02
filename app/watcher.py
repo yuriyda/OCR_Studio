@@ -21,6 +21,7 @@ import os
 import shutil
 import time as _time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
@@ -266,6 +267,47 @@ def post_process_done(data_dir: Path, doc: dict) -> None:
         logger.exception(
             "watcher: failed to move source to processed/ for %s", doc["id"]
         )
+
+
+def post_process_error(data_dir: Path, doc: dict, error_message: str) -> None:
+    """File-system bookkeeping for a watcher document that failed OCR.
+
+    1. Move /watch/inbox/<rel> to /watch/inbox/errors/<rel> (if source still exists).
+    2. Write /watch/inbox/errors/<rel>.error.txt with doc id + timestamp + message.
+
+    Sidecar is written even when the source has vanished — this preserves a
+    breadcrumb for the user.
+    """
+    if doc.get("source") != "watch":
+        return
+    rel_str = doc.get("source_relpath")
+    if not rel_str:
+        return
+    rel = Path(rel_str)
+
+    try:
+        src = get_inbox() / rel
+        if src.exists():
+            dst = _path_with_collision_suffix(get_errors() / rel)
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(src), str(dst))
+    except Exception:
+        logger.exception("watcher: failed to move source to errors/ for %s", doc["id"])
+
+    try:
+        sidecar = get_errors() / f"{rel}.error.txt"
+        sidecar.parent.mkdir(parents=True, exist_ok=True)
+        body = (
+            f"doc_id: {doc.get('id')}\n"
+            f"filename: {doc.get('filename')}\n"
+            f"source_relpath: {rel_str}\n"
+            f"timestamp: {datetime.now(timezone.utc).isoformat(timespec='seconds')}\n"
+            f"\n"
+            f"{error_message}\n"
+        )
+        sidecar.write_text(body, encoding="utf-8")
+    except Exception:
+        logger.exception("watcher: failed to write error sidecar for %s", doc["id"])
 
 
 async def watcher_loop(
