@@ -18,8 +18,13 @@ from __future__ import annotations
 import logging
 import os
 import time as _time
+import uuid
 from pathlib import Path
 from typing import Iterator
+
+from . import db as _db
+from . import files as _files
+from .storage import DocumentRepo, WATCH_PROJECT_ID
 
 logger = logging.getLogger(__name__)
 
@@ -91,8 +96,8 @@ def scan_inbox(inbox: Path) -> Iterator[tuple[Path, str]]:
 
 
 # Stability cache helpers.
-# Key: Path; Value: (mtime, size, first_seen_wall_clock).
-_stability_cache: dict[Path, tuple[float, int, float]] = {}
+# Key: Path; Value: (mtime, size).
+_stability_cache: dict[Path, tuple[float, int]] = {}
 
 
 def _reset_stability_cache() -> None:
@@ -117,6 +122,86 @@ def is_stable(path: Path, stable_secs: int) -> bool:
     now = _time.time()
     prev = _stability_cache.get(path)
     if prev is None or prev[0] != st.st_mtime or prev[1] != st.st_size:
-        _stability_cache[path] = (st.st_mtime, st.st_size, now)
+        _stability_cache[path] = (st.st_mtime, st.st_size)
         return False
     return (now - st.st_mtime) >= stable_secs
+
+
+# Same limit as the upload endpoint (POST /api/ocr). Duplicated intentionally
+# to avoid importing main (circular dependency risk).
+_MAX_FILE_SIZE = 50 * 1024 * 1024
+
+# Watcher always runs OCR in Russian — hardcoded per project decision.
+_WATCH_LANG = "ru"
+
+
+def try_ingest(
+    data_dir: Path,
+    db_path: Path,
+    task_queue,
+    abs_path: Path,
+    rel_path: str,
+) -> bool:
+    """Ingest `abs_path` into the Watch project and enqueue it for OCR.
+
+    Returns True if a new DB row was created (queued or error), False if the
+    file was deduplicated (already in pipeline) and should be left alone.
+
+    Oversized files (> _MAX_FILE_SIZE) are recorded as status='error' and NOT
+    enqueued; the worker post-hook will move them to errors/ and write a sidecar.
+
+    On success or oversize-error, the stability-cache entry for `abs_path` is
+    evicted: the file is about to leave the inbox via post_process_done/error,
+    so retaining its (mtime, size) pair would only grow the cache.
+    """
+    conn = _db.get_connection(db_path)
+    try:
+        doc_repo = DocumentRepo(conn)
+        if doc_repo.exists_active_by_relpath(WATCH_PROJECT_ID, rel_path):
+            return False
+        try:
+            content = abs_path.read_bytes()
+        except OSError as e:
+            logger.warning("watcher: cannot read %s: %s", abs_path, e)
+            return False
+        doc_id = uuid.uuid4().hex[:12]
+        filename = abs_path.name
+        if len(content) > _MAX_FILE_SIZE:
+            doc_repo.create(
+                doc_id=doc_id,
+                project_id=WATCH_PROJECT_ID,
+                filename=filename,
+                format="md",
+                lang=_WATCH_LANG,
+                size_bytes=len(content),
+                source="watch",
+                source_relpath=rel_path,
+            )
+            doc_repo.update(
+                doc_id,
+                status="error",
+                error=f"file too large ({len(content)} bytes, max {_MAX_FILE_SIZE})",
+            )
+            _stability_cache.pop(abs_path, None)
+            return True
+        # Save a physical copy into data/docs/<doc_id>/original.<ext> so the
+        # worker can process it even after the source is moved to processed/.
+        _files.save_original(data_dir, doc_id, content, filename)
+        doc_repo.create(
+            doc_id=doc_id,
+            project_id=WATCH_PROJECT_ID,
+            filename=filename,
+            format="md",
+            lang=_WATCH_LANG,
+            size_bytes=len(content),
+            source="watch",
+            source_relpath=rel_path,
+        )
+    finally:
+        conn.close()
+    # asyncio.Queue.put_nowait is safe from a sync caller when the queue is
+    # unbounded (maxsize=0). The watcher uses the same queue as main.py creates
+    # with asyncio.Queue() (no maxsize), so this is always safe.
+    task_queue.put_nowait(doc_id)
+    _stability_cache.pop(abs_path, None)
+    return True

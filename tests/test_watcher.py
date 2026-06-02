@@ -7,13 +7,17 @@ Maintenance notes:
 - Stability cache is module-global — reset via watcher._reset_stability_cache()
   in test setup.
 """
+import asyncio
 import os
 import time
+import uuid
 from pathlib import Path
 
 import pytest
 
+from app import db
 from app import watcher
+from app.storage import DocumentRepo, ProjectRepo, WATCH_PROJECT_ID
 
 
 @pytest.fixture
@@ -111,3 +115,105 @@ def test_is_stable_returns_false_if_mtime_too_recent(watch_root):
     # mtime is "now" — should not be considered stable even after two observations.
     watcher.is_stable(p, stable_secs=10)
     assert watcher.is_stable(p, stable_secs=10) is False
+
+
+# ---------------------------------------------------------------------------
+# try_ingest tests (T6)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def watcher_db(tmp_path):
+    db_path = tmp_path / "data.db"
+    db.init(db_path)
+    conn = db.get_connection(db_path)
+    try:
+        ProjectRepo(conn).ensure_inbox()
+        ProjectRepo(conn).ensure_watch_project()
+    finally:
+        conn.close()
+    return db_path
+
+
+@pytest.fixture
+def data_dir(tmp_path):
+    d = tmp_path / "data"
+    (d / "docs").mkdir(parents=True)
+    return d
+
+
+def test_try_ingest_creates_doc_and_queues(watch_root, watcher_db, data_dir):
+    src = watch_root / "inbox" / "foo.pdf"
+    src.write_bytes(b"%PDF-1.4 content")
+    queue: asyncio.Queue = asyncio.Queue()
+    accepted = watcher.try_ingest(
+        data_dir=data_dir,
+        db_path=watcher_db,
+        task_queue=queue,
+        abs_path=src,
+        rel_path="foo.pdf",
+    )
+    assert accepted is True
+    # Source file remains in place (worker post-hook moves it later).
+    assert src.exists()
+    # Queue has one entry.
+    assert queue.qsize() == 1
+    doc_id = queue.get_nowait()
+    # DB row exists with expected fields.
+    conn = db.get_connection(watcher_db)
+    try:
+        d = DocumentRepo(conn).get(doc_id)
+        assert d["project_id"] == WATCH_PROJECT_ID
+        assert d["filename"] == "foo.pdf"
+        assert d["source"] == "watch"
+        assert d["source_relpath"] == "foo.pdf"
+        assert d["status"] == "queued"
+        assert d["lang"] == "ru"
+        assert d["format"] == "md"
+    finally:
+        conn.close()
+
+
+def test_try_ingest_skips_duplicate(watch_root, watcher_db, data_dir):
+    src = watch_root / "inbox" / "a" / "foo.pdf"
+    src.parent.mkdir(parents=True)
+    src.write_bytes(b"%PDF-1.4")
+    queue: asyncio.Queue = asyncio.Queue()
+    assert watcher.try_ingest(data_dir, watcher_db, queue, src, "a/foo.pdf") is True
+    assert watcher.try_ingest(data_dir, watcher_db, queue, src, "a/foo.pdf") is False
+    assert queue.qsize() == 1
+
+
+def test_try_ingest_marks_oversized_as_error_without_queueing(
+    watch_root, watcher_db, data_dir, monkeypatch
+):
+    monkeypatch.setattr(watcher, "_MAX_FILE_SIZE", 10)
+    src = watch_root / "inbox" / "huge.pdf"
+    src.write_bytes(b"%PDF-1.4 way too large for limit")
+    queue: asyncio.Queue = asyncio.Queue()
+    accepted = watcher.try_ingest(data_dir, watcher_db, queue, src, "huge.pdf")
+    assert accepted is True
+    assert queue.qsize() == 0  # not queued for OCR
+    conn = db.get_connection(watcher_db)
+    try:
+        rows = conn.execute(
+            "SELECT id, status, error FROM documents WHERE project_id = ? AND source_relpath = ?",
+            (WATCH_PROJECT_ID, "huge.pdf"),
+        ).fetchall()
+        assert len(rows) == 1
+        assert rows[0]["status"] == "error"
+        assert "too large" in rows[0]["error"].lower()
+    finally:
+        conn.close()
+
+
+def test_try_ingest_pops_stability_cache_on_success(watch_root, watcher_db, data_dir):
+    """Carry-forward from T5 review: cache should not accumulate entries
+    for files that get ingested."""
+    src = watch_root / "inbox" / "foo.pdf"
+    src.write_bytes(b"%PDF-1.4")
+    # Prime the cache by calling is_stable (records the path).
+    watcher.is_stable(src, stable_secs=0)
+    assert src in watcher._stability_cache
+    queue: asyncio.Queue = asyncio.Queue()
+    watcher.try_ingest(data_dir, watcher_db, queue, src, "foo.pdf")
+    assert src not in watcher._stability_cache
