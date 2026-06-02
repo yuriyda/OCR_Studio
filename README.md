@@ -183,6 +183,13 @@ Create the `watch/` directory on the host before the first `docker compose up` s
 mkdir -p watch/inbox watch/out
 ```
 
+Two optional environment variables tune the watcher (defaults in `docker-compose.yml`):
+
+- `WATCH_INTERVAL` — poll cycle in seconds (default `5.0`).
+- `WATCH_STABLE_SECS` — minimum time a file's `(mtime, size)` must stay unchanged before ingest, to avoid grabbing partially-written files (default `3`).
+
+Re-OCR of a watch-folder document (via the UI gear menu) still works: the original is preserved inside `data/docs/<doc_id>/`, independent of `/watch/`. The new result is written next to the previous one as `<name>_1.md` (collision suffix); the source remains in `processed/` and is not moved again.
+
 ### Run
 
 ```bash
