@@ -243,11 +243,13 @@ class DocumentRepo:
         Used by /api/system to show the currently processing file in the
         global status bar. Only one document can be in 'processing' at a
         time under single-worker design, but we still take a deterministic
-        ordering by created_at to avoid jitter if multiple ever appear.
+        ordering (created_at, id) to avoid jitter if multiple ever appear.
+        Note: created_at is recorded at second granularity, so ties on the
+        same second are broken by id ASC (TEXT UUID hex, stable).
         """
         row = self.conn.execute(
             "SELECT filename, size_bytes FROM documents "
-            "WHERE status = 'processing' ORDER BY created_at ASC LIMIT 1"
+            "WHERE status = 'processing' ORDER BY created_at ASC, id ASC LIMIT 1"
         ).fetchone()
         if row is None:
             return None
