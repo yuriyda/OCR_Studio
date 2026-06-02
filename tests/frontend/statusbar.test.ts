@@ -8,7 +8,7 @@ describe('renderStatusBar', () => {
   function idleQueue() {
     return {
       active: false, completedInBatch: 0, totalInBatch: 0, activeNow: 0,
-      elapsedMs: 0, etaMs: null, lastSummary: null,
+      elapsedMs: 0, etaMs: null, lastSummary: null, current: null,
     };
   }
 
@@ -133,7 +133,7 @@ describe('renderStatusBar', () => {
       project: null,
       queue: {
         active: true, completedInBatch: 12, totalInBatch: 20, activeNow: 8,
-        elapsedMs: 204000, etaMs: 338000, lastSummary: null,
+        elapsedMs: 204000, etaMs: 338000, lastSummary: null, current: null,
       },
     });
     const queueRow = sb.querySelector('[data-queue-row]') as HTMLElement;
@@ -155,7 +155,7 @@ describe('renderStatusBar', () => {
       project: null,
       queue: {
         active: true, completedInBatch: 0, totalInBatch: 5, activeNow: 5,
-        elapsedMs: 1000, etaMs: null, lastSummary: null,
+        elapsedMs: 1000, etaMs: null, lastSummary: null, current: null,
       },
     });
     const queueRow = sb.querySelector('[data-queue-row]') as HTMLElement;
@@ -172,7 +172,7 @@ describe('renderStatusBar', () => {
       project: null,
       queue: {
         active: true, completedInBatch: 7, totalInBatch: 5, activeNow: 0,
-        elapsedMs: 5000, etaMs: null, lastSummary: null,
+        elapsedMs: 5000, etaMs: null, lastSummary: null, current: null,
       },
     });
     const fill = sb.querySelector('[data-queue-fill]') as HTMLElement;
@@ -187,10 +187,43 @@ describe('renderStatusBar', () => {
       project: null,
       queue: {
         active: true, completedInBatch: 1, totalInBatch: 10, activeNow: 9,
-        elapsedMs: 3725000, etaMs: 36000, lastSummary: null,
+        elapsedMs: 3725000, etaMs: 36000, lastSummary: null, current: null,
       },
     });
     const queueRow = sb.querySelector('[data-queue-row]') as HTMLElement;
     expect(queueRow.textContent).toContain('1:02:05');
+  });
+
+  it('renders current filename and size at end of queue row when active', () => {
+    const sb = document.getElementById('sb')!;
+    renderStatusBar(sb, {
+      env: { gpu: 'X', cuda: '1', vram_gb: 8 },
+      engine: { name: 'X', lang: 'ru', status: 'ready', pipeline: [] },
+      project: null,
+      queue: {
+        active: true, completedInBatch: 1, totalInBatch: 3, activeNow: 2,
+        elapsedMs: 5000, etaMs: 10000, lastSummary: null,
+        current: { filename: 'doc.pdf', size_bytes: 2_400_000 },
+      },
+    });
+    const queueRow = sb.querySelector('[data-queue-row]') as HTMLElement;
+    expect(queueRow.textContent).toContain('doc.pdf');
+    expect(queueRow.textContent).toContain('2.3 МБ');
+  });
+
+  it('omits current filename when queue.current is null', () => {
+    const sb = document.getElementById('sb')!;
+    renderStatusBar(sb, {
+      env: { gpu: 'X', cuda: '1', vram_gb: 8 },
+      engine: { name: 'X', lang: 'ru', status: 'ready', pipeline: [] },
+      project: null,
+      queue: {
+        active: true, completedInBatch: 0, totalInBatch: 3, activeNow: 3,
+        elapsedMs: 1000, etaMs: null, lastSummary: null,
+        current: null,
+      },
+    });
+    const queueRow = sb.querySelector('[data-queue-row]') as HTMLElement;
+    expect(queueRow.textContent).not.toContain('.pdf');
   });
 });

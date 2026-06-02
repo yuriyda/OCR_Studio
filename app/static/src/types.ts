@@ -64,10 +64,16 @@ export interface HqRecommendation {
   warning: string | null;
 }
 
+export interface QueueCurrent {
+  filename: string;
+  size_bytes: number;
+}
+
 export interface QueueCounts {
   queued: number;
   processing: number;
   completed_since_start: number;
+  current: QueueCurrent | null;
 }
 
 export interface SystemInfo {

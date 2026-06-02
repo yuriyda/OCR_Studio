@@ -33,6 +33,8 @@ export interface StatusBarQueue {
   etaMs: number | null;
   /** Summary of the last completed batch, shown in idle state as a tail label. */
   lastSummary: { total: number; elapsedMs: number } | null;
+  /** Currently processing document, or null if idle or unknown. */
+  current: { filename: string; size_bytes: number } | null;
 }
 
 export interface StatusBarData {
@@ -82,6 +84,9 @@ function renderQueueRow(q: StatusBarQueue): string {
   parts.push(t('statusbar.queue.elapsed', { duration: formatDuration(q.elapsedMs) }));
   if (q.etaMs !== null && q.completedInBatch > 0) {
     parts.push(t('statusbar.queue.eta', { duration: formatDuration(q.etaMs) }));
+  }
+  if (q.current !== null) {
+    parts.push(`${q.current.filename} (${formatBytes(q.current.size_bytes)})`);
   }
   const text = parts.join(' · ');
   return `
