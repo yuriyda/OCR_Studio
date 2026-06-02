@@ -313,3 +313,68 @@ async def test_watcher_loop_survives_exceptions(
     except asyncio.CancelledError:
         pass
     assert queue.qsize() == 1
+
+
+# ---------------------------------------------------------------------------
+# post_process_done tests (T8)
+# ---------------------------------------------------------------------------
+
+def _make_done_doc(data_dir: Path, rel_path: str, md_content: str = "# result") -> dict:
+    """Create the on-disk artifacts and dict that post_process_done expects."""
+    from app import files as files_mod
+    doc_id = uuid.uuid4().hex[:12]
+    files_mod.save_result(data_dir, doc_id, md_content, "md")
+    return {
+        "id": doc_id,
+        "filename": Path(rel_path).name,
+        "source": "watch",
+        "source_relpath": rel_path,
+    }
+
+
+def test_post_process_done_writes_mirrored_md_and_moves_source(
+    watch_root, data_dir
+):
+    rel = "contracts/2026/foo.pdf"
+    src = watch_root / "inbox" / rel
+    src.parent.mkdir(parents=True)
+    src.write_bytes(b"%PDF-1.4")
+    doc = _make_done_doc(data_dir, rel, md_content="# foo result")
+
+    watcher.post_process_done(data_dir, doc)
+
+    expected_out = watch_root / "out" / "contracts" / "2026" / "foo.md"
+    assert expected_out.exists()
+    assert expected_out.read_text(encoding="utf-8") == "# foo result"
+
+    expected_processed = watch_root / "inbox" / "processed" / rel
+    assert expected_processed.exists()
+    assert not src.exists()
+
+
+def test_post_process_done_handles_output_name_collision(watch_root, data_dir):
+    rel = "foo.pdf"
+    src = watch_root / "inbox" / rel
+    src.write_bytes(b"%PDF")
+    (watch_root / "out" / "foo.md").write_text("old", encoding="utf-8")
+
+    doc = _make_done_doc(data_dir, rel, md_content="new")
+    watcher.post_process_done(data_dir, doc)
+
+    assert (watch_root / "out" / "foo.md").read_text(encoding="utf-8") == "old"
+    assert (watch_root / "out" / "foo_1.md").read_text(encoding="utf-8") == "new"
+
+
+def test_post_process_done_handles_missing_source_gracefully(watch_root, data_dir):
+    rel = "vanished.pdf"
+    # No file at watch_root/inbox/vanished.pdf — source was deleted between
+    # OCR done and post-hook.
+    doc = _make_done_doc(data_dir, rel, md_content="still wrote result")
+    watcher.post_process_done(data_dir, doc)
+    assert (watch_root / "out" / "vanished.md").exists()
+
+
+def test_post_process_done_skips_non_watch_documents(watch_root, data_dir):
+    doc = {"id": "x", "filename": "y.pdf", "source": None, "source_relpath": None}
+    watcher.post_process_done(data_dir, doc)
+    assert list((watch_root / "out").rglob("*")) == []

@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import shutil
 import time as _time
 import uuid
 from pathlib import Path
@@ -206,6 +207,65 @@ def try_ingest(
     task_queue.put_nowait(doc_id)
     _stability_cache.pop(abs_path, None)
     return True
+
+
+def _path_with_collision_suffix(target: Path) -> Path:
+    """Return `target` if it does not exist, otherwise `target` with a `_1`, `_2`, ...
+    suffix before the extension. Same convention as /api/projects/{id}/zip.
+    """
+    if not target.exists():
+        return target
+    stem = target.stem
+    suffix = target.suffix
+    parent = target.parent
+    n = 1
+    while True:
+        candidate = parent / f"{stem}_{n}{suffix}"
+        if not candidate.exists():
+            return candidate
+        n += 1
+
+
+def post_process_done(data_dir: Path, doc: dict) -> None:
+    """File-system bookkeeping for a watcher document that finished OCR.
+
+    1. Copy result.md to /watch/out/<rel_dir>/<stem>.md (with collision suffix).
+    2. Move /watch/inbox/<rel> to /watch/inbox/processed/<rel>.
+
+    Both steps are best-effort: if the source file is gone, we still write the
+    result; if mkdir/copy/move fails, we log and return. The DB document
+    remains as-is.
+    """
+    if doc.get("source") != "watch":
+        return
+    rel_str = doc.get("source_relpath")
+    if not rel_str:
+        return
+    rel = Path(rel_str)
+
+    # 1. Copy result.md to /watch/out/.
+    try:
+        result_md = _files.result_path_for_format(data_dir, doc["id"], "md")
+        if result_md is not None:
+            out_target = get_out() / rel.parent / f"{rel.stem}.md"
+            out_target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(str(result_md), str(_path_with_collision_suffix(out_target)))
+    except Exception:
+        logger.exception(
+            "watcher: failed to copy result.md to /watch/out for %s", doc["id"]
+        )
+
+    # 2. Move source -> processed/.
+    try:
+        src = get_inbox() / rel
+        if src.exists():
+            dst = _path_with_collision_suffix(get_processed() / rel)
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(src), str(dst))
+    except Exception:
+        logger.exception(
+            "watcher: failed to move source to processed/ for %s", doc["id"]
+        )
 
 
 async def watcher_loop(
