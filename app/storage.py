@@ -139,12 +139,16 @@ class DocumentRepo:
         format: str,
         lang: str,
         size_bytes: int,
+        source: Optional[str] = None,
+        source_relpath: Optional[str] = None,
     ) -> dict:
         self.conn.execute(
             """INSERT INTO documents
-               (id, project_id, filename, format, lang, status, created_at, size_bytes)
-               VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)""",
-            (doc_id, project_id, filename, format, lang, _now_iso(), size_bytes),
+               (id, project_id, filename, format, lang, status, created_at,
+                size_bytes, source, source_relpath)
+               VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)""",
+            (doc_id, project_id, filename, format, lang, _now_iso(),
+             size_bytes, source, source_relpath),
         )
         self.conn.commit()
         return self.get(doc_id)
@@ -226,3 +230,21 @@ class DocumentRepo:
             (project_id,),
         )
         return [dict(r) for r in cur.fetchall()]
+
+    def exists_active_by_relpath(self, project_id: int, source_relpath: str) -> bool:
+        """Return True iff an active (queued/processing/done) watcher document
+        already exists for this (project, source_relpath) pair.
+
+        Used by the watcher to avoid re-ingesting a file that is already in
+        the pipeline or has already been processed. 'error' documents are NOT
+        considered active — the user may have moved the file out of errors/
+        and re-dropped it for a retry.
+        """
+        row = self.conn.execute(
+            "SELECT 1 FROM documents "
+            "WHERE project_id = ? AND source_relpath = ? "
+            "AND status IN ('queued', 'processing', 'done') "
+            "LIMIT 1",
+            (project_id, source_relpath),
+        ).fetchone()
+        return row is not None

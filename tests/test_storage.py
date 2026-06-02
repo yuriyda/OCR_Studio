@@ -279,3 +279,84 @@ def test_watch_project_cannot_be_deleted(tmp_path):
             repo.delete(WATCH_PROJECT_ID)
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------------------------
+# DocumentRepo — source / source_relpath columns (T3)
+# ---------------------------------------------------------------------------
+
+def test_create_document_with_watch_source(tmp_path):
+    db_path = tmp_path / "data.db"
+    db.init(db_path)
+    conn = db.get_connection(db_path)
+    try:
+        ProjectRepo(conn).ensure_inbox()
+        ProjectRepo(conn).ensure_watch_project()
+        repo = DocumentRepo(conn)
+        repo.create(
+            doc_id="abc123",
+            project_id=WATCH_PROJECT_ID,
+            filename="foo.pdf",
+            format="md",
+            lang="ru",
+            size_bytes=1024,
+            source="watch",
+            source_relpath="contracts/2026/foo.pdf",
+        )
+        d = repo.get("abc123")
+        assert d["source"] == "watch"
+        assert d["source_relpath"] == "contracts/2026/foo.pdf"
+    finally:
+        conn.close()
+
+
+def test_create_document_without_source_keeps_nulls(tmp_path):
+    db_path = tmp_path / "data.db"
+    db.init(db_path)
+    conn = db.get_connection(db_path)
+    try:
+        ProjectRepo(conn).ensure_inbox()
+        repo = DocumentRepo(conn)
+        repo.create(
+            doc_id="abc124",
+            project_id=INBOX_ID,
+            filename="bar.pdf",
+            format="md",
+            lang="ru",
+            size_bytes=2048,
+        )
+        d = repo.get("abc124")
+        assert d["source"] is None
+        assert d["source_relpath"] is None
+    finally:
+        conn.close()
+
+
+def test_exists_active_by_relpath(tmp_path):
+    db_path = tmp_path / "data.db"
+    db.init(db_path)
+    conn = db.get_connection(db_path)
+    try:
+        ProjectRepo(conn).ensure_inbox()
+        ProjectRepo(conn).ensure_watch_project()
+        repo = DocumentRepo(conn)
+        assert repo.exists_active_by_relpath(WATCH_PROJECT_ID, "a/b/foo.pdf") is False
+        repo.create(
+            doc_id="dup1",
+            project_id=WATCH_PROJECT_ID,
+            filename="foo.pdf",
+            format="md",
+            lang="ru",
+            size_bytes=512,
+            source="watch",
+            source_relpath="a/b/foo.pdf",
+        )
+        # Default status is 'queued' -> counts as active
+        assert repo.exists_active_by_relpath(WATCH_PROJECT_ID, "a/b/foo.pdf") is True
+        # Different project -> not seen
+        assert repo.exists_active_by_relpath(INBOX_ID, "a/b/foo.pdf") is False
+        # Mark as error -> no longer active
+        repo.update("dup1", status="error", error="boom")
+        assert repo.exists_active_by_relpath(WATCH_PROJECT_ID, "a/b/foo.pdf") is False
+    finally:
+        conn.close()
