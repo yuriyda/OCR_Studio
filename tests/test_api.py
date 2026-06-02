@@ -1247,3 +1247,55 @@ def test_read_watcher_env_falls_back_on_unparseable_values(monkeypatch):
     monkeypatch.setenv("WATCH_STABLE_SECS", "xyz")
     from app.main import _read_watcher_env
     assert _read_watcher_env() == (5.0, 3)
+
+
+def test_system_endpoint_includes_queue_field(client):
+    r = client.get("/api/system")
+    assert r.status_code == 200
+    data = r.json()
+    assert "queue" in data
+    assert set(data["queue"].keys()) == {"queued", "processing", "completed_since_start"}
+    assert data["queue"]["queued"] == 0
+    assert data["queue"]["processing"] == 0
+    assert data["queue"]["completed_since_start"] == 0
+
+
+def test_system_queue_counts_queued_and_processing(client):
+    r = _upload(client)
+    queued_doc_id = r.json()["ids"][0]
+
+    r2 = _upload(client, name="y.pdf")
+    processing_doc_id = r2.json()["ids"][0]
+
+    from app import main, storage
+    conn = main._conn()
+    try:
+        storage.DocumentRepo(conn).update(processing_doc_id, status="processing")
+    finally:
+        conn.close()
+
+    data = client.get("/api/system").json()
+    assert data["queue"]["queued"] == 1
+    assert data["queue"]["processing"] == 1
+
+
+def test_system_queue_excludes_done_and_error(client):
+    r = _upload(client)
+    doc_id = r.json()["ids"][0]
+    from app import main, storage
+    conn = main._conn()
+    try:
+        storage.DocumentRepo(conn).update(doc_id, status="done")
+    finally:
+        conn.close()
+
+    data = client.get("/api/system").json()
+    assert data["queue"]["queued"] == 0
+    assert data["queue"]["processing"] == 0
+
+
+def test_system_completed_counter_exposed(client, monkeypatch):
+    from app import main
+    monkeypatch.setattr(main, "_completed_counter", 42)
+    data = client.get("/api/system").json()
+    assert data["queue"]["completed_since_start"] == 42

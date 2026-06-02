@@ -57,6 +57,12 @@ task_queue: asyncio.Queue = asyncio.Queue()
 # on completion via done_callback.
 _background_tasks: set[asyncio.Task] = set()
 
+# Global counter of documents that have left the queue (done OR error).
+# Reset only on uvicorn restart. Consumed by /api/system to drive the
+# client-side batch tracker — frontend uses it as a baseline to derive
+# "completed in this batch" without server-side batch persistence.
+_completed_counter: int = 0
+
 
 def _spawn_bg(coro) -> asyncio.Task:
     """Create a background task and hold a reference until it completes."""
@@ -134,6 +140,7 @@ def _conn():
 # --- Worker ---
 
 async def worker():
+    global _completed_counter
     while True:
         doc_id = await task_queue.get()
         conn = _conn()
@@ -202,6 +209,7 @@ async def worker():
                     stage_detail=None,
                     stage_updated_at=_now_iso(),
                 )
+                _completed_counter += 1
                 logger.info("Doc %s done: %s", doc_id, doc["filename"])
                 try:
                     watcher.post_process_done(DATA_DIR, doc)
@@ -212,6 +220,7 @@ async def worker():
                 doc_repo.update(doc_id, status="error", error=str(e),
                                 finished_at=_now_iso(),
                                 stage=None, stage_detail=None, stage_updated_at=_now_iso())
+                _completed_counter += 1
                 try:
                     watcher.post_process_error(DATA_DIR, doc, error_message=str(e))
                 except Exception:
@@ -802,11 +811,19 @@ async def system_info():
         status = "loading"
     else:
         status = "ready"
-    return sys_info.get_system_info(
+    info = sys_info.get_system_info(
         engine_status=status,
         engine_lang="ru",
         engine_pipeline=PIPELINE_MODELS,
     )
+    conn = _conn()
+    try:
+        queue = DocumentRepo(conn).queue_counts()
+    finally:
+        conn.close()
+    queue["completed_since_start"] = _completed_counter
+    info["queue"] = queue
+    return info
 
 
 @app.get("/api/limits")

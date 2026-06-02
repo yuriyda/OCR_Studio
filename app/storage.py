@@ -222,6 +222,21 @@ class DocumentRepo:
         ).fetchall()
         return [r["id"] for r in rows]
 
+    def queue_counts(self) -> dict[str, int]:
+        """Return active queue snapshot: counts of documents in queued / processing.
+
+        Used by /api/system to drive the global status bar progress indicator.
+        Excludes 'done' and 'error' — those documents are no longer in the queue.
+        """
+        rows = self.conn.execute(
+            "SELECT status, COUNT(*) AS n FROM documents "
+            "WHERE status IN ('queued', 'processing') GROUP BY status"
+        ).fetchall()
+        counts = {"queued": 0, "processing": 0}
+        for r in rows:
+            counts[r["status"]] = int(r["n"])
+        return counts
+
     def queued_in_project(self, project_id: int) -> list[dict]:
         """Return queued documents in the given project, ordered by creation time."""
         cur = self.conn.execute(
