@@ -87,6 +87,14 @@ async function pollSystemState(): Promise<void> {
       state.setRecommendation(envCache.recommendation);
     }
     setBatch(updateBatch(getBatch(), envCache.queue, Date.now()));
+    // When the global queue is active, force-restart the document poller in
+    // case shouldStop() killed it earlier on an empty project (e.g., Watch
+    // project receives a new doc from the inbox watcher while the user has
+    // it open). polling.start() is idempotent — restart resets the timer but
+    // does not cause duplicate fetches.
+    if (getBatch().active) {
+      polling.start();
+    }
     refreshStatusBar();
   } catch {
     // Transient network error — keep previous state, just reschedule.
