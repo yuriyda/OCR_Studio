@@ -217,3 +217,99 @@ def test_try_ingest_pops_stability_cache_on_success(watch_root, watcher_db, data
     queue: asyncio.Queue = asyncio.Queue()
     watcher.try_ingest(data_dir, watcher_db, queue, src, "foo.pdf")
     assert src not in watcher._stability_cache
+
+
+# ---------------------------------------------------------------------------
+# watcher_loop tests (T7)
+# ---------------------------------------------------------------------------
+
+def _drain_queue(q: asyncio.Queue) -> list[str]:
+    out = []
+    while not q.empty():
+        out.append(q.get_nowait())
+    return out
+
+
+@pytest.mark.asyncio
+async def test_watcher_loop_ingests_stable_files(watch_root, watcher_db, data_dir):
+    src = watch_root / "inbox" / "foo.pdf"
+    src.write_bytes(b"%PDF-1.4")
+    past = time.time() - 10
+    os.utime(src, (past, past))
+
+    queue: asyncio.Queue = asyncio.Queue()
+    reload_state = {"done": True}
+    task = asyncio.create_task(watcher.watcher_loop(
+        data_dir=data_dir, db_path=watcher_db, task_queue=queue,
+        reload_state=reload_state, interval=0.05, stable_secs=0,
+    ))
+    await asyncio.sleep(0.25)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+    queued = _drain_queue(queue)
+    assert len(queued) == 1
+
+
+@pytest.mark.asyncio
+async def test_watcher_loop_skips_cycles_during_engine_reload(
+    watch_root, watcher_db, data_dir
+):
+    src = watch_root / "inbox" / "foo.pdf"
+    src.write_bytes(b"%PDF-1.4")
+    past = time.time() - 10
+    os.utime(src, (past, past))
+
+    queue: asyncio.Queue = asyncio.Queue()
+    reload_state = {"done": False}
+    task = asyncio.create_task(watcher.watcher_loop(
+        data_dir=data_dir, db_path=watcher_db, task_queue=queue,
+        reload_state=reload_state, interval=0.05, stable_secs=0,
+    ))
+    await asyncio.sleep(0.3)
+    assert queue.qsize() == 0
+    reload_state["done"] = True
+    await asyncio.sleep(0.3)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    assert queue.qsize() == 1
+
+
+@pytest.mark.asyncio
+async def test_watcher_loop_survives_exceptions(
+    watch_root, watcher_db, data_dir, monkeypatch
+):
+    calls = {"n": 0}
+    real_scan = watcher.scan_inbox
+
+    def flaky(inbox):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("boom")
+        return real_scan(inbox)
+
+    monkeypatch.setattr(watcher, "scan_inbox", flaky)
+    src = watch_root / "inbox" / "foo.pdf"
+    src.write_bytes(b"%PDF-1.4")
+    past = time.time() - 10
+    os.utime(src, (past, past))
+
+    queue: asyncio.Queue = asyncio.Queue()
+    reload_state = {"done": True}
+    task = asyncio.create_task(watcher.watcher_loop(
+        data_dir=data_dir, db_path=watcher_db, task_queue=queue,
+        reload_state=reload_state, interval=0.05, stable_secs=0,
+    ))
+    await asyncio.sleep(0.5)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    assert queue.qsize() == 1

@@ -15,6 +15,7 @@ Maintenance notes:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time as _time
@@ -205,3 +206,48 @@ def try_ingest(
     task_queue.put_nowait(doc_id)
     _stability_cache.pop(abs_path, None)
     return True
+
+
+async def watcher_loop(
+    data_dir: Path,
+    db_path: Path,
+    task_queue: asyncio.Queue,
+    reload_state: dict,
+    interval: float = 5.0,
+    stable_secs: int = 3,
+) -> None:
+    """Background asyncio task: scan the inbox every `interval` seconds and
+    ingest stable files.
+
+    - `reload_state` is the shared dict from app.main._reload_state. When its
+      'done' flag is False (engine reload in progress), the watcher skips the
+      ingest pass to avoid racing with PUT /api/settings.
+    - Exceptions inside the loop are logged and never propagate; the loop
+      remains alive for the process lifetime.
+    """
+    logger.info(
+        "watcher: starting (watch_root=%s, interval=%.1fs, stable_secs=%ds)",
+        get_watch_root(), interval, stable_secs,
+    )
+    while True:
+        try:
+            if reload_state.get("done") is False:
+                await asyncio.sleep(interval)
+                continue
+            inbox = get_inbox()
+            for abs_path, rel_path in scan_inbox(inbox):
+                if not is_stable(abs_path, stable_secs):
+                    continue
+                try:
+                    try_ingest(
+                        data_dir=data_dir,
+                        db_path=db_path,
+                        task_queue=task_queue,
+                        abs_path=abs_path,
+                        rel_path=rel_path,
+                    )
+                except Exception:
+                    logger.exception("watcher: try_ingest failed for %s", abs_path)
+        except Exception:
+            logger.exception("watcher: scan cycle failed")
+        await asyncio.sleep(interval)
