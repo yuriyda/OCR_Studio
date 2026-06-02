@@ -1254,7 +1254,7 @@ def test_system_endpoint_includes_queue_field(client):
     assert r.status_code == 200
     data = r.json()
     assert "queue" in data
-    assert set(data["queue"].keys()) == {"queued", "processing", "completed_since_start"}
+    assert set(data["queue"].keys()) == {"queued", "processing", "completed_since_start", "current"}
     assert data["queue"]["queued"] == 0
     assert data["queue"]["processing"] == 0
     assert data["queue"]["completed_since_start"] == 0
@@ -1299,3 +1299,42 @@ def test_system_completed_counter_exposed(client, monkeypatch):
     monkeypatch.setattr(main, "_completed_counter", 42)
     data = client.get("/api/system").json()
     assert data["queue"]["completed_since_start"] == 42
+
+
+def test_system_queue_current_null_when_no_processing(client):
+    data = client.get("/api/system").json()
+    assert data["queue"]["current"] is None
+
+
+def test_system_queue_current_returns_processing_doc(client):
+    r = _upload(client, name="doc-a.pdf")
+    doc_id = r.json()["ids"][0]
+    from app import main, storage
+    conn = main._conn()
+    try:
+        storage.DocumentRepo(conn).update(doc_id, status="processing")
+    finally:
+        conn.close()
+
+    data = client.get("/api/system").json()
+    assert data["queue"]["current"] is not None
+    assert data["queue"]["current"]["filename"] == "doc-a.pdf"
+    assert isinstance(data["queue"]["current"]["size_bytes"], int)
+    assert data["queue"]["current"]["size_bytes"] > 0
+
+
+def test_system_queue_current_picks_one_when_multiple_processing(client):
+    r1 = _upload(client, name="doc-1.pdf")
+    r2 = _upload(client, name="doc-2.pdf")
+    from app import main, storage
+    conn = main._conn()
+    try:
+        repo = storage.DocumentRepo(conn)
+        repo.update(r1.json()["ids"][0], status="processing")
+        repo.update(r2.json()["ids"][0], status="processing")
+    finally:
+        conn.close()
+
+    data = client.get("/api/system").json()
+    assert data["queue"]["current"] is not None
+    assert data["queue"]["current"]["filename"] in ("doc-1.pdf", "doc-2.pdf")

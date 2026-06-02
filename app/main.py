@@ -818,10 +818,13 @@ async def system_info():
     )
     conn = _conn()
     try:
-        queue = DocumentRepo(conn).queue_counts()
+        repo = DocumentRepo(conn)
+        queue = repo.queue_counts()
+        current = repo.currently_processing()
     finally:
         conn.close()
     queue["completed_since_start"] = _completed_counter
+    queue["current"] = current
     info["queue"] = queue
     return info
 

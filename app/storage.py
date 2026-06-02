@@ -237,6 +237,22 @@ class DocumentRepo:
             counts[r["status"]] = int(r["n"])
         return counts
 
+    def currently_processing(self) -> dict | None:
+        """Return the oldest 'processing' document as a dict, or None.
+
+        Used by /api/system to show the currently processing file in the
+        global status bar. Only one document can be in 'processing' at a
+        time under single-worker design, but we still take a deterministic
+        ordering by created_at to avoid jitter if multiple ever appear.
+        """
+        row = self.conn.execute(
+            "SELECT filename, size_bytes FROM documents "
+            "WHERE status = 'processing' ORDER BY created_at ASC LIMIT 1"
+        ).fetchone()
+        if row is None:
+            return None
+        return {"filename": row["filename"], "size_bytes": int(row["size_bytes"])}
+
     def queued_in_project(self, project_id: int) -> list[dict]:
         """Return queued documents in the given project, ordered by creation time."""
         cur = self.conn.execute(
