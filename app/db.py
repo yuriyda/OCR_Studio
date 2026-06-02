@@ -11,7 +11,7 @@ Maintenance notes:
 import sqlite3
 from pathlib import Path
 
-CURRENT_VERSION = 5
+CURRENT_VERSION = 6
 
 
 def get_connection(db_path: Path) -> sqlite3.Connection:
@@ -49,6 +49,9 @@ def init(db_path: Path) -> None:
         if current < 5:
             _migrate_to_v5(conn, was_fresh=(current == 0))
             conn.execute("INSERT INTO schema_version VALUES (5)")
+        if current < 6:
+            _migrate_to_v6(conn)
+            conn.execute("INSERT INTO schema_version VALUES (6)")
         conn.commit()
     finally:
         conn.close()
@@ -215,3 +218,18 @@ def _migrate_to_v5(conn: sqlite3.Connection, was_fresh: bool) -> None:
         ("onboarding_seen", onboarding_value),
     ]
     conn.executemany("INSERT INTO settings (key, value) VALUES (?, ?)", defaults)
+
+
+def _migrate_to_v6(conn: sqlite3.Connection) -> None:
+    """Add `source` and `source_relpath` columns for the watch-folder pipeline.
+
+    `source`         — NULL for documents created through HTTP upload (POST /api/ocr);
+                       'watch' for documents ingested by app.watcher.
+    `source_relpath` — for source='watch': relative path inside `/watch/inbox/` such as
+                       'contracts/2026/foo.pdf'. NULL for uploads.
+
+    Both columns are nullable so existing rows remain valid. ALTER TABLE ADD COLUMN
+    is the cheapest path here — no recreation needed (no CHECK constraints required).
+    """
+    conn.execute("ALTER TABLE documents ADD COLUMN source TEXT")
+    conn.execute("ALTER TABLE documents ADD COLUMN source_relpath TEXT")

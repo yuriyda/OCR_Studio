@@ -26,7 +26,7 @@ def test_init_idempotent(tmp_data_dir):
     db.init(db_path)  # second call must not raise
     conn = sqlite3.connect(db_path)
     rows = conn.execute("SELECT version FROM schema_version ORDER BY version").fetchall()
-    assert rows == [(1,), (2,), (3,), (4,), (5,)]
+    assert rows == [(1,), (2,), (3,), (4,), (5,), (6,)]
     conn.close()
 
 
@@ -212,7 +212,7 @@ def test_settings_table_created_on_v5(tmp_path):
         cols = [r[1] for r in conn.execute("PRAGMA table_info(settings)").fetchall()]
         assert cols == ["key", "value"], f"unexpected columns: {cols}"
         ver = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
-        assert ver == 5
+        assert ver >= 5  # v5 creates settings; current version may be higher
     finally:
         conn.close()
 
@@ -226,6 +226,29 @@ def test_settings_migration_marks_existing_users_onboarded(tmp_path):
     conn_setup.execute("INSERT INTO schema_version VALUES (2)")
     conn_setup.execute("INSERT INTO schema_version VALUES (3)")
     conn_setup.execute("INSERT INTO schema_version VALUES (4)")
+    # Create a minimal documents table so v6 ALTER TABLE ADD COLUMN can succeed.
+    # Simulates a real pre-v5 installation that always had documents (created at v1).
+    conn_setup.execute("""
+        CREATE TABLE documents (
+            id TEXT PRIMARY KEY,
+            project_id INTEGER NOT NULL,
+            filename TEXT NOT NULL,
+            format TEXT NOT NULL,
+            lang TEXT NOT NULL,
+            status TEXT NOT NULL,
+            error TEXT,
+            created_at TEXT NOT NULL,
+            started_at TEXT,
+            finished_at TEXT,
+            page_count INTEGER,
+            current_page INTEGER,
+            progress_percent REAL,
+            size_bytes INTEGER,
+            stage TEXT,
+            stage_updated_at TEXT,
+            stage_detail TEXT
+        )
+    """)
     conn_setup.commit()
     conn_setup.close()
 
@@ -253,6 +276,25 @@ def test_settings_migration_fresh_install_not_onboarded(tmp_path):
         ).fetchone()
         assert row is not None
         assert row[0] == "0", "fresh install must show onboarding"
+    finally:
+        conn.close()
+
+
+def test_v6_adds_source_columns(tmp_path):
+    """v6 migration adds documents.source and documents.source_relpath as nullable columns."""
+    db_path = tmp_path / "data.db"
+    db.init(db_path)
+    conn = db.get_connection(db_path)
+    try:
+        cols = {row["name"]: row for row in conn.execute("PRAGMA table_info(documents)")}
+        assert "source" in cols
+        assert "source_relpath" in cols
+        assert cols["source"]["notnull"] == 0
+        assert cols["source_relpath"]["notnull"] == 0
+        assert cols["source"]["dflt_value"] is None
+        assert cols["source_relpath"]["dflt_value"] is None
+        v = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
+        assert v == 6
     finally:
         conn.close()
 
