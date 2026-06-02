@@ -29,7 +29,8 @@ import { initSplitter } from './splitter';
 import { openSettingsModal } from './settings_modal';
 import { showReloadModal, hideReloadModal } from './reload_modal';
 import { renderHqIndicator } from './render';
-import { isAnyHqActive } from './state';
+import { isAnyHqActive, getBatch, setBatch } from './state';
+import { updateBatch } from './batch_tracker';
 import type { Document, Project, SystemInfo, ApiLimits, LangCode } from './types';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -75,26 +76,53 @@ async function refreshDocuments(): Promise<void> {
   refreshRecognizeButton();
 }
 
-async function refreshSystem(): Promise<void> {
-  envCache = await api.getSystemInfo();
-  // Store the GPU-based HQ recommendation so settings_modal can display it.
-  if (envCache.recommendation) {
-    state.setRecommendation(envCache.recommendation);
+const SYSTEM_POLL_ACTIVE_MS = 2000;
+const SYSTEM_POLL_IDLE_MS = 10000;
+
+async function pollSystemState(): Promise<void> {
+  try {
+    envCache = await api.getSystemInfo();
+    // Store the GPU-based HQ recommendation so settings_modal can display it.
+    if (envCache.recommendation) {
+      state.setRecommendation(envCache.recommendation);
+    }
+    setBatch(updateBatch(getBatch(), envCache.queue, Date.now()));
+    refreshStatusBar();
+  } catch {
+    // Transient network error — keep previous state, just reschedule.
+  } finally {
+    const interval = getBatch().active ? SYSTEM_POLL_ACTIVE_MS : SYSTEM_POLL_IDLE_MS;
+    setTimeout(pollSystemState, interval);
   }
-  refreshStatusBar();
 }
 
 function refreshStatusBar(): void {
   const proj = projectsCache.find(p => p.id === state.activeProjectId);
   const processing = docsCache.filter(d => d.status === 'processing').length;
   const queued = docsCache.filter(d => d.status === 'queued').length;
-  // NOTE: queue field will be wired to live BatchState in T5 (pollSystemState).
-  // For now pass a safe idle placeholder so the status bar renders without errors.
+  const batch = getBatch();
+  const elapsedMs = batch.active && batch.startTime !== null ? Date.now() - batch.startTime : 0;
+  const remaining = Math.max(0, batch.totalInBatch - batch.completedInBatch);
+  // Guard: skip ETA when no remaining work (avoids rendering "~ETA 0s" on last doc).
+  const etaMs = batch.active
+    && batch.completedInBatch > 0
+    && remaining > 0
+    && elapsedMs > 0
+      ? (elapsedMs / batch.completedInBatch) * remaining
+      : null;
   renderStatusBar($('statusbar'), {
     env: { gpu: envCache.gpu, cuda: envCache.cuda, vram_gb: envCache.vram_gb },
     engine: { name: 'PPStructureV3', lang: envCache.engine_lang, status: envCache.engine_status, pipeline: envCache.engine_pipeline },
     project: proj ? { name: proj.name, doc_count: proj.doc_count, total_bytes: proj.total_bytes, processing, queued } : null,
-    queue: { active: false, completedInBatch: 0, totalInBatch: 0, activeNow: 0, elapsedMs: 0, etaMs: null, lastSummary: null },
+    queue: {
+      active: batch.active,
+      completedInBatch: batch.completedInBatch,
+      totalInBatch: batch.totalInBatch,
+      activeNow: batch.activeNow,
+      elapsedMs,
+      etaMs,
+      lastSummary: batch.lastSummary,
+    },
   });
 }
 
@@ -638,7 +666,7 @@ async function boot(): Promise<void> {
   bindDynamicActions();
   watchReloadProgress();
 
-  await refreshSystem();
+  pollSystemState();
   await refreshProjects();
   polling.setProject(state.activeProjectId);
   await refreshDocuments();
