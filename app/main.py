@@ -66,6 +66,25 @@ def _spawn_bg(coro) -> asyncio.Task:
     return task
 
 
+def _read_watcher_env() -> tuple[float, int]:
+    """Read WATCH_INTERVAL (poll cycle, seconds, float) and WATCH_STABLE_SECS
+    (partial-write stability window, seconds, int) from process environment.
+
+    Defaults: 5.0 and 3 — match docker-compose.yml and watcher_loop signature.
+    Falls back to defaults silently if the env var is unparseable. Keeps the
+    container resilient to typos: misconfigured values do not crash startup.
+    """
+    try:
+        interval = float(os.environ.get("WATCH_INTERVAL", "5.0"))
+    except ValueError:
+        interval = 5.0
+    try:
+        stable_secs = int(os.environ.get("WATCH_STABLE_SECS", "3"))
+    except ValueError:
+        stable_secs = 3
+    return interval, stable_secs
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -85,11 +104,14 @@ async def lifespan(app: FastAPI):
         conn.close()
     _spawn_bg(worker())
     _spawn_bg(orphan_cleanup_loop())
+    watcher_interval, watcher_stable_secs = _read_watcher_env()
     _spawn_bg(watcher.watcher_loop(
         data_dir=DATA_DIR,
         db_path=DB_PATH,
         task_queue=task_queue,
         reload_state=_reload_state,
+        interval=watcher_interval,
+        stable_secs=watcher_stable_secs,
     ))
     asyncio.get_running_loop().run_in_executor(
         None, lambda: ocr_engine.get_engine(DB_PATH)

@@ -1223,3 +1223,27 @@ def test_watch_project_cannot_be_renamed_via_api(client):
 def test_watch_project_cannot_be_deleted_via_api(client):
     resp = client.delete("/api/projects/2")
     assert resp.status_code == 400
+
+
+def test_read_watcher_env_defaults(monkeypatch):
+    """No env vars set → (5.0, 3) — matches docker-compose.yml documented defaults."""
+    monkeypatch.delenv("WATCH_INTERVAL", raising=False)
+    monkeypatch.delenv("WATCH_STABLE_SECS", raising=False)
+    from app.main import _read_watcher_env
+    assert _read_watcher_env() == (5.0, 3)
+
+
+def test_read_watcher_env_reads_from_environment(monkeypatch):
+    """Explicit env vars are parsed and returned."""
+    monkeypatch.setenv("WATCH_INTERVAL", "2.5")
+    monkeypatch.setenv("WATCH_STABLE_SECS", "10")
+    from app.main import _read_watcher_env
+    assert _read_watcher_env() == (2.5, 10)
+
+
+def test_read_watcher_env_falls_back_on_unparseable_values(monkeypatch):
+    """Garbage env vars fall back to defaults instead of crashing startup."""
+    monkeypatch.setenv("WATCH_INTERVAL", "abc")
+    monkeypatch.setenv("WATCH_STABLE_SECS", "xyz")
+    from app.main import _read_watcher_env
+    assert _read_watcher_env() == (5.0, 3)
