@@ -4,6 +4,8 @@
   "header.recognize": "Распознать",
   "header.recognize.processing": "Обработка...",
   "sidebar.projects": "Проекты",
+  "projects.inbox": "Входящие",
+  "projects.watch": "Слежение",
   "sidebar.documents": "Документы",
   "sidebar.dropzone.hint": "Перетащите файлы или нажмите для выбора",
   "sidebar.dropzone.limits": "Максимум {mb} МБ на файл",

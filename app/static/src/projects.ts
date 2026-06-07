@@ -13,6 +13,7 @@
 
 import type { Project } from './types';
 import { formatBytes } from './icons';
+import { t } from './i18n';
 
 export const INBOX_ID = 1;
 export const WATCH_PROJECT_ID = 2;
@@ -34,10 +35,15 @@ export function renderProjects(container: HTMLElement, projects: Project[], acti
     const active = p.id === activeId ? 'active' : '';
     const menu = protected_ ? '' : '<span class="proj-menu cursor-pointer text-text-muted px-1">⋯</span>';
     const icon = p.id === INBOX_ID ? '📥' : p.id === WATCH_PROJECT_ID ? '👁' : '📁';
+    const displayName = p.id === INBOX_ID
+      ? t('projects.inbox')
+      : p.id === WATCH_PROJECT_ID
+        ? t('projects.watch')
+        : p.name;
     return `
       <div class="project-item doc-item ${active}" data-id="${p.id}">
         <span>${icon}</span>
-        <span class="flex-1 truncate">${escHtml(p.name)}</span>
+        <span class="flex-1 truncate">${escHtml(displayName)}</span>
         <span class="text-xs text-text-muted whitespace-nowrap">${p.doc_count} · ${formatBytes(p.total_bytes)}</span>
         ${menu}
       </div>`;

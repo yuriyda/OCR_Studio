@@ -48,6 +48,28 @@ describe('renderProjects', () => {
     expect(c.innerHTML).toContain('&lt;script&gt;');
   });
 
+  it('localizes Inbox and Watch names under ru locale', () => {
+    loadLang('ru');
+    const c = document.getElementById('c')!;
+    renderProjects(c, sample, 1);
+    const inboxText = c.querySelector('[data-id="1"]')?.textContent ?? '';
+    const watchText = c.querySelector('[data-id="2"]')?.textContent ?? '';
+    const reportsText = c.querySelector('[data-id="3"]')?.textContent ?? '';
+    expect(inboxText).toContain('Входящие');
+    expect(inboxText).not.toContain('Inbox');
+    expect(watchText).toContain('Слежение');
+    expect(watchText).not.toContain('Watch');
+    expect(reportsText).toContain('Reports');
+  });
+
+  it('uses English labels for protected projects under en locale', () => {
+    loadLang('en');
+    const c = document.getElementById('c')!;
+    renderProjects(c, sample, 1);
+    expect(c.querySelector('[data-id="1"]')?.textContent).toContain('Inbox');
+    expect(c.querySelector('[data-id="2"]')?.textContent).toContain('Watch');
+  });
+
   it('INBOX_ID equals 1', () => expect(INBOX_ID).toBe(1));
 });
 

@@ -4,6 +4,8 @@
   "header.recognize": "Recognize",
   "header.recognize.processing": "Processing...",
   "sidebar.projects": "Projects",
+  "projects.inbox": "Inbox",
+  "projects.watch": "Watch",
   "sidebar.documents": "Documents",
   "sidebar.dropzone.hint": "Drop files or click to select",
   "sidebar.dropzone.limits": "Max {mb} MB per file",
