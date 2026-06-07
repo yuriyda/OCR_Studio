@@ -92,8 +92,12 @@ async function pollSystemState(): Promise<void> {
     // project receives a new doc from the inbox watcher while the user has
     // it open). polling.start() is idempotent — restart resets the timer but
     // does not cause duplicate fetches.
+    // Also refresh the projects sidebar so per-project count/size counters
+    // (especially Watch) reflect ongoing ingest in real time. Errors are
+    // swallowed by the outer try/catch — the next tick will retry.
     if (getBatch().active) {
       polling.start();
+      refreshProjects();
     }
     refreshStatusBar();
   } catch {
