@@ -1,8 +1,17 @@
+# PaddlePaddle GPU wheels live on a separate index, not PyPI.
+# Default index below targets CUDA 12.6. For a different CUDA replace
+# `cu126` with `cu118`, `cu123` or `cu129` (see paddlepaddle.org.cn).
+--extra-index-url https://www.paddlepaddle.org.cn/packages/stable/cu126/
+
+# Core OCR stack — pin the trio together, they are tightly coupled.
+# paddlepaddle-gpu must be >= 3.1 (paddlex 3.5.x imports fused_rms_norm_ext).
+paddlepaddle-gpu==3.3.1
+paddleocr==3.5.0
+paddlex==3.5.1
+
 fastapi==0.115.12
 uvicorn[standard]==0.34.2
 python-multipart==0.0.20
-paddleocr==3.5.0
-paddlex==3.5.1
 PyMuPDF==1.25.5
 Pillow>=10.0.0
 beautifulsoup4>=4.12.0
