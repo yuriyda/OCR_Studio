@@ -217,6 +217,11 @@ async function selectFirstDocOrClear(): Promise<void> {
 async function selectDocument(docId: string): Promise<void> {
   if (selectedDocId !== docId) selectedPageIdx = 0;
   selectedDocId = docId;
+  // Sync the doc-list highlight with the new selection — renderDocuments reads
+  // selectedDocId to place the 'active' class. Preview rerenders below already
+  // fire, but the sidebar row highlight would otherwise stay on the previous
+  // document until the next refresh cycle.
+  renderDocuments($('doc-list'), docsCache, selectedDocId);
   const doc = docsCache.find(d => d.id === docId) ?? null;
   if (doc) {
     if (doc.status === 'done') {
