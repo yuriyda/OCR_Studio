@@ -15,6 +15,7 @@ Maintenance notes:
 """
 
 import logging
+import os
 from pathlib import Path
 
 from bs4 import BeautifulSoup
@@ -23,6 +24,22 @@ from paddleocr import PPStructureV3
 logger = logging.getLogger(__name__)
 
 _engine: PPStructureV3 | None = None
+
+
+def _layout_threshold() -> float:
+    """Read OCR_LAYOUT_THRESHOLD env var, default 0.3.
+
+    Lower than PaddleX default (~0.5) — needed because DocLayout classifies
+    UI screenshots as non-document with low confidence, dropping most text
+    boxes at the default threshold. 0.3 restores UI/screenshot inputs while
+    still filtering obvious false positives on paper scans.
+    """
+    raw = os.environ.get("OCR_LAYOUT_THRESHOLD", "0.3")
+    try:
+        return float(raw)
+    except ValueError:
+        logger.warning("Invalid OCR_LAYOUT_THRESHOLD=%r; falling back to 0.3", raw)
+        return 0.3
 
 # List of key PPStructureV3 pipeline models. Used in /api/system and
 # stage_label ("Loading models: ..."). Names correspond to directories in
@@ -142,10 +159,11 @@ def get_engine(db_path: Path | None = None) -> "PPStructureV3":
                 cfg = settings_mod.SettingsRepo(conn).get_hq_config()
             finally:
                 conn.close()
+        lt = _layout_threshold()
         logger.info(
-            "Loading PPStructureV3 (lang=ru, HQ flags: orientation=%s unwarp=%s "
-            "textline=%s chart=%s seal=%s)...",
-            cfg["hq_orientation"], cfg["hq_unwarping"], cfg["hq_textline"],
+            "Loading PPStructureV3 (lang=ru, layout_threshold=%.2f, HQ flags: "
+            "orientation=%s unwarp=%s textline=%s chart=%s seal=%s)...",
+            lt, cfg["hq_orientation"], cfg["hq_unwarping"], cfg["hq_textline"],
             cfg["hq_chart"], cfg["hq_seal"],
         )
         _engine = PPStructureV3(
@@ -155,6 +173,7 @@ def get_engine(db_path: Path | None = None) -> "PPStructureV3":
             use_textline_orientation=cfg["hq_textline"],
             use_chart_recognition=cfg["hq_chart"],
             use_seal_recognition=cfg["hq_seal"],
+            layout_threshold=lt,
             lang='ru',
         )
         logger.info("PPStructureV3 ready.")
@@ -355,6 +374,8 @@ async def reload_engine_async(db_path, on_progress, on_done, on_error) -> None:
         lg.addHandler(handler)
         lg.setLevel(logging.INFO)
 
+    lt = _layout_threshold()
+
     def build():
         global _engine
         _engine = None  # release VRAM via GC
@@ -365,6 +386,7 @@ async def reload_engine_async(db_path, on_progress, on_done, on_error) -> None:
             use_textline_orientation=cfg["hq_textline"],
             use_chart_recognition=cfg["hq_chart"],
             use_seal_recognition=cfg["hq_seal"],
+            layout_threshold=lt,
             lang='ru',
         )
 
@@ -389,7 +411,11 @@ async def reload_engine_async(db_path, on_progress, on_done, on_error) -> None:
             def build_basic():
                 global _engine
                 _engine = None
-                _engine = PPStructureV3(use_table_recognition=True, lang='ru')
+                _engine = PPStructureV3(
+                    use_table_recognition=True,
+                    layout_threshold=lt,
+                    lang='ru',
+                )
 
             await asyncio.to_thread(build_basic)
         except Exception:
