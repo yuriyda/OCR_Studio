@@ -13,7 +13,7 @@ import './main.css';
 import { api, ApiError, getSettings, reocrDoc, reocrProject } from './api';
 import { state } from './state';
 import { loadLang, applyI18nToDom, t } from './i18n';
-import { renderProjects, INBOX_ID, isProtectedProject } from './projects';
+import { renderProjects, INBOX_ID, WATCH_PROJECT_ID, isProtectedProject } from './projects';
 import { renderDocuments, applySort } from './documents';
 import { renderSourcePane } from './source';
 import { renderResult, allResultTabs, TAB_TO_FORMAT, isTabAvailable, type ResultTabKey } from './preview';
@@ -60,6 +60,18 @@ function checkSize(files: File[]): File[] {
   return filterBySize(files, limitsCache.max_file_size_bytes, (tooLarge, max) => {
     toast.show(formatTooLargeMessage(tooLarge, max), 'error');
   });
+}
+
+// The Watch project is filesystem-fed only (files land there via app/watcher.py
+// scanning /watch/inbox). Uploads through the UI (file picker or dnd) targeting
+// Watch would mix hand-added docs with FS-ingested ones, breaking the semantic
+// of the project. Redirect such uploads to Inbox and notify the user.
+function resolveUploadTarget(pid: number): number {
+  if (pid === WATCH_PROJECT_ID) {
+    toast.show(t('toast.upload_watch_redirected'), 'info');
+    return INBOX_ID;
+  }
+  return pid;
 }
 
 async function refreshProjects(): Promise<void> {
@@ -449,7 +461,7 @@ function bindUI(): void {
   fileInput.addEventListener('change', () => {
     if (fileInput.files?.length) {
       const files = checkSize(Array.from(fileInput.files));
-      if (files.length) uploadFiles(files, state.activeProjectId);
+      if (files.length) uploadFiles(files, resolveUploadTarget(state.activeProjectId));
     }
     fileInput.value = '';
   });
@@ -458,7 +470,7 @@ function bindUI(): void {
   dropzone.addEventListener('drop', (e) => {
     dropzone.classList.remove('border-accent');
     handleDrop(e as DragEvent, state.activeProjectId, {
-      onUpload: (files, pid) => { const ok = checkSize(files); if (ok.length) uploadFiles(ok, pid); },
+      onUpload: (files, pid) => { const ok = checkSize(files); if (ok.length) uploadFiles(ok, resolveUploadTarget(pid)); },
       onMove: async () => { /* dropzone does not accept document moves */ },
     });
   });
