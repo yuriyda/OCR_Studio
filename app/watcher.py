@@ -27,6 +27,7 @@ from typing import Iterator
 
 from . import db as _db
 from . import files as _files
+from .limits import MAX_FILE_SIZE as _MAX_FILE_SIZE
 from .storage import DocumentRepo, WATCH_PROJECT_ID
 
 logger = logging.getLogger(__name__)
@@ -130,10 +131,6 @@ def is_stable(path: Path, stable_secs: int) -> bool:
     return (now - st.st_mtime) >= stable_secs
 
 
-# Same limit as the upload endpoint (POST /api/ocr). Duplicated intentionally
-# to avoid importing main (circular dependency risk).
-_MAX_FILE_SIZE = 50 * 1024 * 1024
-
 # Watcher always runs OCR in Russian — hardcoded per project decision.
 _WATCH_LANG = "ru"
 
@@ -150,8 +147,10 @@ def try_ingest(
     Returns True if a new DB row was created (queued or error), False if the
     file was deduplicated (already in pipeline) and should be left alone.
 
-    Oversized files (> _MAX_FILE_SIZE) are recorded as status='error' and NOT
-    enqueued; the worker post-hook will move them to errors/ and write a sidecar.
+    Oversized files (> _MAX_FILE_SIZE) are recorded as status='error', NOT
+    enqueued, and their source is moved to errors/ (with a sidecar) right here:
+    the worker post-hook never runs for them, and a file left in inbox would be
+    re-ingested as a fresh error row on every scan cycle.
 
     On success or oversize-error, the stability-cache entry for `abs_path` is
     evicted: the file is about to leave the inbox via post_process_done/error,
@@ -170,6 +169,7 @@ def try_ingest(
         doc_id = uuid.uuid4().hex[:12]
         filename = abs_path.name
         if len(content) > _MAX_FILE_SIZE:
+            error_message = f"file too large ({len(content)} bytes, max {_MAX_FILE_SIZE})"
             doc_repo.create(
                 doc_id=doc_id,
                 project_id=WATCH_PROJECT_ID,
@@ -180,10 +180,19 @@ def try_ingest(
                 source="watch",
                 source_relpath=rel_path,
             )
-            doc_repo.update(
-                doc_id,
-                status="error",
-                error=f"file too large ({len(content)} bytes, max {_MAX_FILE_SIZE})",
+            doc_repo.update(doc_id, status="error", error=error_message)
+            # The doc is never queued, so the worker post-hook can't move the
+            # source out of inbox — do it now, otherwise the next scan re-ingests
+            # the same file as a new error row, endlessly.
+            post_process_error(
+                data_dir,
+                {
+                    "id": doc_id,
+                    "filename": filename,
+                    "source": "watch",
+                    "source_relpath": rel_path,
+                },
+                error_message,
             )
             _stability_cache.pop(abs_path, None)
             return True

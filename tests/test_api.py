@@ -429,10 +429,13 @@ def test_status_elapsed_none_when_not_started(client):
 
 
 def test_limits_endpoint(client):
+    from app.limits import MAX_FILE_SIZE
     r = client.get("/api/limits")
     assert r.status_code == 200
     body = r.json()
-    assert body["max_file_size_bytes"] == 50 * 1024 * 1024
+    # Compare against the imported constant so a non-default OCR_MAX_FILE_MB
+    # (e.g. in CI or a running compose stack) does not make this test flap.
+    assert body["max_file_size_bytes"] == MAX_FILE_SIZE
     assert ".pdf" in body["allowed_extensions"]
 
 

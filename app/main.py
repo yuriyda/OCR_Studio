@@ -23,12 +23,11 @@ from fastapi.staticfiles import StaticFiles
 
 from . import db, files, ocr_engine, converters, watcher
 from . import system as sys_info
+from .limits import MAX_FILE_SIZE, MAX_FILE_SIZE_MB
 from .storage import ProjectRepo, DocumentRepo, ProjectError, INBOX_ID
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-MAX_FILE_SIZE = 50 * 1024 * 1024
 ALLOWED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".webp"}
 
 PAGE_WARNING_THRESHOLD = 50
@@ -304,7 +303,7 @@ async def upload_files(
                 continue
             content = await f.read()
             if len(content) > MAX_FILE_SIZE:
-                errors.append({"filename": f.filename, "error": "File too large (max 50 MB)"})
+                errors.append({"filename": f.filename, "error": f"File too large (max {MAX_FILE_SIZE_MB} MB)"})
                 continue
             doc_id = uuid.uuid4().hex[:12]
             files.save_original(DATA_DIR, doc_id, content, f.filename or "file")

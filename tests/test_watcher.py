@@ -193,6 +193,12 @@ def test_try_ingest_marks_oversized_as_error_without_queueing(
     accepted = watcher.try_ingest(data_dir, watcher_db, queue, src, "huge.pdf")
     assert accepted is True
     assert queue.qsize() == 0  # not queued for OCR
+    # source leaves inbox immediately (the worker post-hook never runs for
+    # oversized docs), with a sidecar explaining why
+    assert not src.exists()
+    assert (watch_root / "inbox" / "errors" / "huge.pdf").exists()
+    sidecar = watch_root / "inbox" / "errors" / "huge.pdf.error.txt"
+    assert "too large" in sidecar.read_text(encoding="utf-8").lower()
     conn = db.get_connection(watcher_db)
     try:
         rows = conn.execute(
@@ -202,6 +208,31 @@ def test_try_ingest_marks_oversized_as_error_without_queueing(
         assert len(rows) == 1
         assert rows[0]["status"] == "error"
         assert "too large" in rows[0]["error"].lower()
+    finally:
+        conn.close()
+
+
+def test_try_ingest_oversized_does_not_multiply_on_rescan(
+    watch_root, watcher_db, data_dir, monkeypatch
+):
+    """Regression (2026-07-12): the oversized source stayed in inbox, and since
+    'error' rows are not considered active, every scan cycle re-ingested it as
+    a fresh error row — one duplicate per WATCH_INTERVAL, forever."""
+    monkeypatch.setattr(watcher, "_MAX_FILE_SIZE", 10)
+    src = watch_root / "inbox" / "huge.pdf"
+    src.write_bytes(b"%PDF-1.4 way too large for limit")
+    queue: asyncio.Queue = asyncio.Queue()
+    assert watcher.try_ingest(data_dir, watcher_db, queue, src, "huge.pdf") is True
+    # the file is now under errors/, which scan_inbox never yields from —
+    # the next scan cycles see an empty inbox and create no new rows
+    assert list(watcher.scan_inbox(watch_root / "inbox")) == []
+    conn = db.get_connection(watcher_db)
+    try:
+        n = conn.execute(
+            "SELECT COUNT(*) FROM documents WHERE project_id = ? AND source_relpath = ?",
+            (WATCH_PROJECT_ID, "huge.pdf"),
+        ).fetchone()[0]
+        assert n == 1
     finally:
         conn.close()
 

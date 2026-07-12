@@ -9,6 +9,8 @@ services:
       - ./watch:/watch
     environment:
       - OCR_DATA_DIR=/app/data
+      - OCR_MAX_FILE_MB=200             # source file size limit in MB (default 50);
+                                        # file is read into memory in full — 64 GB RAM has plenty of headroom
     deploy:
       resources:
         reservations:
